@@ -22,6 +22,7 @@ class OverlayService : Service() {
         const val EXTRA_DIRECTION = "direction"
         const val EXTRA_TX_CODE = "tx_code"
         const val EXTRA_BALANCE = "balance"
+        const val EXTRA_TX_COST = "txCost"
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -30,10 +31,11 @@ class OverlayService : Service() {
         val direction = intent?.getStringExtra(EXTRA_DIRECTION) ?: "out"
         val txCode = intent?.getStringExtra(EXTRA_TX_CODE) ?: ""
         val balance = intent?.getDoubleExtra(EXTRA_BALANCE, 0.0) ?: 0.0
+        val txCost = intent?.getDoubleExtra(EXTRA_TX_COST, 0.0) ?: 0.0
 
         Log.d("OverlayService", "Showing bubble: $direction Ksh$amount")
 
-        showBubble(amount, recipient, direction, txCode, balance)
+        showBubble(amount, recipient, direction, txCode, balance, txCost)
 
         return START_NOT_STICKY
     }
@@ -43,9 +45,9 @@ class OverlayService : Service() {
         recipient: String,
         direction: String,
         txCode: String,
-        balance: Double
+        balance: Double,
+        txCost: Double
     ) {
-        // Remove any existing bubble first
         removeBubble()
 
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
@@ -65,7 +67,6 @@ class OverlayService : Service() {
         bubbleView = LayoutInflater.from(this)
             .inflate(R.layout.overlay_bubble, null)
 
-        // Format amount — strip decimals if .00
         val amountText = if (amount % 1.0 == 0.0)
             amount.toInt().toString()
         else
@@ -73,20 +74,15 @@ class OverlayService : Service() {
 
         bubbleView?.findViewById<TextView>(R.id.bubble_amount)?.text = amountText
 
-        // Colour: blue for incoming, red for outgoing
         val bgColor = if (direction == "in") 0xFF1A73E8.toInt() else 0xFFE53935.toInt()
         bubbleView?.findViewById<android.widget.LinearLayout>(R.id.bubble_collapsed)
             ?.setBackgroundColor(bgColor)
 
-        // Make it circular
         bubbleView?.findViewById<android.widget.LinearLayout>(R.id.bubble_collapsed)
-            ?.background = resources.getDrawable(
-                android.R.drawable.btn_default_small, null
-            )
+            ?.background = resources.getDrawable(android.R.drawable.btn_default_small, null)
         bubbleView?.findViewById<android.widget.LinearLayout>(R.id.bubble_collapsed)
             ?.setBackgroundColor(bgColor)
 
-        // Drag support — lets you move the bubble around the screen
         var initialX = 0; var initialY = 0
         var initialTouchX = 0f; var initialTouchY = 0f
         var isDragging = false
@@ -110,8 +106,16 @@ class OverlayService : Service() {
                 }
                 MotionEvent.ACTION_UP -> {
                     if (!isDragging) {
-                        // Tap — bubble expand goes here in M4
-                        Log.d("OverlayService", "Bubble tapped — will open tag card in M4")
+                        Log.d("OverlayService", "Bubble tapped — opening tag card")
+                        val transactionData = mapOf(
+                            "amount" to amount,
+                            "recipient" to recipient,
+                            "direction" to direction,
+                            "txCode" to txCode,
+                            "balance" to balance,
+                            "txCost" to txCost
+                        )
+                        MainActivity.instance?.sendToFlutter(transactionData)
                         removeBubble()
                         stopSelf()
                     }

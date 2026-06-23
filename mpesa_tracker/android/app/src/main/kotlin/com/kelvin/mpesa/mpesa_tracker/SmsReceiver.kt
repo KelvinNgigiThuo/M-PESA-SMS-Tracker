@@ -43,6 +43,7 @@ class SmsReceiver : BroadcastReceiver() {
         putExtra(OverlayService.EXTRA_DIRECTION, parsed.direction)
         putExtra(OverlayService.EXTRA_TX_CODE, parsed.transactionCode)
         putExtra(OverlayService.EXTRA_BALANCE, parsed.balanceAfter)
+        putExtra(OverlayService.EXTRA_TX_COST, parsed.transactionCost)
     }
     context.startService(intent)
 }
