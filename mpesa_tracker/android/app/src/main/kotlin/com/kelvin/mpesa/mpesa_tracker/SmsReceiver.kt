@@ -23,15 +23,27 @@ class SmsReceiver : BroadcastReceiver() {
                 val parsed = MpesaParser.parse(fullBody, "out")
                 Log.d("SmsReceiver", "OUTGOING — Ksh${parsed.amount} to ${parsed.recipient}")
                 // M3: trigger bubble here
+                triggerBubble(context, parsed)
             }
             MpesaParser.isIncoming(sender, fullBody) -> {
                 val parsed = MpesaParser.parse(fullBody, "in")
                 Log.d("SmsReceiver", "INCOMING — Ksh${parsed.amount} from ${parsed.recipient}")
                 // M3: trigger bubble here
+                triggerBubble(context, parsed)
             }
             else -> {
                 Log.d("SmsReceiver", "Not an M-Pesa transaction SMS — ignored")
             }
         }
     }
+    private fun triggerBubble(context: Context, parsed: MpesaMessage) {
+    val intent = Intent(context, OverlayService::class.java).apply {
+        putExtra(OverlayService.EXTRA_AMOUNT, parsed.amount)
+        putExtra(OverlayService.EXTRA_RECIPIENT, parsed.recipient)
+        putExtra(OverlayService.EXTRA_DIRECTION, parsed.direction)
+        putExtra(OverlayService.EXTRA_TX_CODE, parsed.transactionCode)
+        putExtra(OverlayService.EXTRA_BALANCE, parsed.balanceAfter)
+    }
+    context.startService(intent)
+}
 }
