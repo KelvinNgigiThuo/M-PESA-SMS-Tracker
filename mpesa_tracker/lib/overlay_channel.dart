@@ -11,6 +11,7 @@ Future<void> showTagCard(BuildContext context, Map<String, dynamic> data) async 
   final txCode = data['txCode'] as String;
   final balance = (data['balance'] as num).toDouble();
 
+  // Auto-save transaction fee silently before showing card
   if (txCost > 0) {
     await db.insertTransaction(TransactionsCompanion(
       txCode: drift.Value('${txCode}_fee'),
@@ -43,7 +44,6 @@ Future<void> showTagCard(BuildContext context, Map<String, dynamic> data) async 
   );
 }
 
-// ── Single stateful card that manages its own screen flow ────────────
 class _TagCard extends StatefulWidget {
   final double amount;
   final String recipient;
@@ -64,14 +64,13 @@ class _TagCard extends StatefulWidget {
 }
 
 class _TagCardState extends State<_TagCard> {
-  // Tracks which screen we're on
   String _screen = 'root';
-
-  // For expense screen
   String? _selectedCategory;
-
-  // For note screens
   final _noteController = TextEditingController();
+
+  // For receivable matching
+  List<Transaction> _receivables = [];
+  bool _loadingReceivables = false;
 
   @override
   void dispose() {
@@ -94,7 +93,6 @@ class _TagCardState extends State<_TagCard> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Handle bar
           Container(
             width: 36, height: 4,
             decoration: BoxDecoration(
@@ -103,7 +101,6 @@ class _TagCardState extends State<_TagCard> {
             ),
           ),
           const SizedBox(height: 12),
-          // Route to correct screen
           _buildScreen(),
         ],
       ),
@@ -112,17 +109,22 @@ class _TagCardState extends State<_TagCard> {
 
   Widget _buildScreen() {
     switch (_screen) {
-      case 'root':         return _buildRoot();
-      case 'bucket':       return _buildBucketPicker();
-      case 'not_mine':     return _buildNotMine();
-      case 'custody':      return _buildCustodyNote();
-      case 'reimbursable': return _buildReimbursableNote();
-      case 'expense':      return _buildExpense();
-      default:             return _buildRoot();
+      case 'root':              return _buildRoot();
+      case 'bucket':            return _buildBucketPicker();
+      // Outflow branches
+      case 'not_mine':          return _buildNotMine();
+      case 'custody':           return _buildCustodyNote();
+      case 'reimbursable':      return _buildReimbursableNote();
+      case 'expense':           return _buildExpense();
+      // Inflow branches
+      case 'inflow_not_mine':   return _buildInflowNotMine();
+      case 'custody_receive':   return _buildCustodyReceive();
+      case 'receivable_match':  return _buildReceivableMatch();
+      default:                  return _buildRoot();
     }
   }
 
-  // ── Header shared across all screens ──────────────────────────────
+  // ── Header ────────────────────────────────────────────────────────
   Widget _buildHeader(String label, {String? backScreen}) {
     return Row(
       children: [
@@ -133,10 +135,8 @@ class _TagCardState extends State<_TagCard> {
           ),
         if (backScreen != null) const SizedBox(width: 4),
         Expanded(
-          child: Text(
-            label,
-            style: const TextStyle(fontSize: 12, color: Colors.grey),
-          ),
+          child: Text(label,
+              style: const TextStyle(fontSize: 12, color: Colors.grey)),
         ),
         GestureDetector(
           onTap: () => _saveUntagged(),
@@ -148,8 +148,9 @@ class _TagCardState extends State<_TagCard> {
 
   // ── Screen: root ──────────────────────────────────────────────────
   Widget _buildRoot() {
+    final isOut = widget.direction == 'out';
     final amountLabel = 'Ksh ${widget.amount.toInt()}';
-    final subLabel = '${widget.direction == "out" ? "to" : "from"} ${widget.recipient}';
+    final subLabel = '${isOut ? "to" : "from"} ${widget.recipient}';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -158,7 +159,8 @@ class _TagCardState extends State<_TagCard> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(amountLabel,
-                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
+                style: const TextStyle(
+                    fontSize: 22, fontWeight: FontWeight.w600)),
             GestureDetector(
               onTap: () => _saveUntagged(),
               child: const Icon(Icons.close, color: Colors.grey),
@@ -168,7 +170,8 @@ class _TagCardState extends State<_TagCard> {
         Text(subLabel,
             style: TextStyle(fontSize: 13, color: Colors.grey[600])),
         const SizedBox(height: 20),
-        if (widget.direction == 'out') ...[
+        if (isOut) ...[
+          // ── Outflow root ──
           _rootBtn(Icons.account_balance, 'My account', Colors.blue,
               () => setState(() => _screen = 'bucket')),
           const SizedBox(height: 8),
@@ -178,17 +181,27 @@ class _TagCardState extends State<_TagCard> {
           _rootBtn(Icons.receipt_long, 'True expense', Colors.red,
               () => setState(() => _screen = 'expense')),
         ] else ...[
-          const Text('Inflow tagging coming in M5',
-              style: TextStyle(color: Colors.grey)),
-          const SizedBox(height: 12),
-          _saveBtn('Save as untagged', () => _saveUntagged()),
+          // ── Inflow root ──
+          _rootBtn(Icons.account_balance, 'From my account', Colors.blue,
+              () => setState(() => _screen = 'bucket')),
+          const SizedBox(height: 8),
+          _rootBtn(Icons.swap_horiz, 'Not mine', Colors.blue,
+              () => setState(() => _screen = 'inflow_not_mine')),
+          const SizedBox(height: 8),
+          _rootBtn(Icons.trending_up, 'True income', Colors.green,
+              () => _saveIncome()),
         ],
       ],
     );
   }
 
-  // ── Screen: bucket picker ─────────────────────────────────────────
+  // ── Screen: bucket picker (shared outflow + inflow) ───────────────
   Widget _buildBucketPicker() {
+    final isOut = widget.direction == 'out';
+    final label = isOut
+        ? 'My account · Ksh ${widget.amount.toInt()}'
+        : 'From my account · Ksh ${widget.amount.toInt()}';
+
     final buckets = [
       {'name': 'NCBA', 'icon': Icons.account_balance},
       {'name': 'KCB Bank', 'icon': Icons.account_balance},
@@ -201,8 +214,7 @@ class _TagCardState extends State<_TagCard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildHeader('My account · Ksh ${widget.amount.toInt()}',
-            backScreen: 'root'),
+        _buildHeader(label, backScreen: 'root'),
         const SizedBox(height: 16),
         GridView.count(
           crossAxisCount: 2,
@@ -222,10 +234,12 @@ class _TagCardState extends State<_TagCard> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(b['icon'] as IconData, color: Colors.blue, size: 20),
+                    Icon(b['icon'] as IconData,
+                        color: Colors.blue, size: 20),
                     const SizedBox(height: 4),
                     Text(b['name'] as String,
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500)),
+                        style: const TextStyle(
+                            fontSize: 11, fontWeight: FontWeight.w500)),
                   ],
                 ),
               ),
@@ -236,7 +250,7 @@ class _TagCardState extends State<_TagCard> {
     );
   }
 
-  // ── Screen: not mine sub-choice ───────────────────────────────────
+  // ── Screen: outflow not-mine sub-choice ───────────────────────────
   Widget _buildNotMine() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -245,20 +259,27 @@ class _TagCardState extends State<_TagCard> {
             backScreen: 'root'),
         const SizedBox(height: 16),
         _rootBtn(Icons.wallet, "I'm holding their money", Colors.blue,
-            () => setState(() { _noteController.clear(); _screen = 'custody'; })),
+            () => setState(() {
+                  _noteController.clear();
+                  _screen = 'custody';
+                })),
         const SizedBox(height: 8),
         _rootBtn(Icons.undo, "I'll be paid back", Colors.blue,
-            () => setState(() { _noteController.clear(); _screen = 'reimbursable'; })),
+            () => setState(() {
+                  _noteController.clear();
+                  _screen = 'reimbursable';
+                })),
       ],
     );
   }
 
-  // ── Screen: custody note ──────────────────────────────────────────
+  // ── Screen: outflow custody note ──────────────────────────────────
   Widget _buildCustodyNote() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildHeader("Holding their money · Ksh ${widget.amount.toInt()}",
+        _buildHeader(
+            "Holding their money · Ksh ${widget.amount.toInt()}",
             backScreen: 'not_mine'),
         const SizedBox(height: 16),
         const Text("What's this for?",
@@ -274,12 +295,12 @@ class _TagCardState extends State<_TagCard> {
           ),
         ),
         const SizedBox(height: 12),
-        _saveBtn('Save', () => _saveCustody()),
+        _saveBtn('Save', () => _saveCustodySpend()),
       ],
     );
   }
 
-  // ── Screen: reimbursable note ─────────────────────────────────────
+  // ── Screen: outflow reimbursable note ─────────────────────────────
   Widget _buildReimbursableNote() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -305,10 +326,9 @@ class _TagCardState extends State<_TagCard> {
     );
   }
 
-  // ── Screen: expense category ──────────────────────────────────────
+  // ── Screen: outflow expense category ─────────────────────────────
   Widget _buildExpense() {
     const categories = ['Food', 'Transport', 'Supplies', 'Bills', 'Other'];
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -322,7 +342,8 @@ class _TagCardState extends State<_TagCard> {
             return ChoiceChip(
               label: Text(c),
               selected: _selectedCategory == c,
-              onSelected: (_) => setState(() => _selectedCategory = c),
+              onSelected: (_) =>
+                  setState(() => _selectedCategory = c),
             );
           }).toList(),
         ),
@@ -333,14 +354,183 @@ class _TagCardState extends State<_TagCard> {
     );
   }
 
+  // ── Screen: inflow not-mine sub-choice ────────────────────────────
+  Widget _buildInflowNotMine() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildHeader('Not mine · Ksh ${widget.amount.toInt()}',
+            backScreen: 'root'),
+        const SizedBox(height: 16),
+        _rootBtn(Icons.add_circle_outline, "Adding to a pool I'm holding",
+            Colors.blue, () => setState(() {
+                  _noteController.clear();
+                  _screen = 'custody_receive';
+                })),
+        const SizedBox(height: 8),
+        _rootBtn(Icons.check_circle_outline,
+            "Clears what I'm owed", Colors.blue,
+            () => _loadReceivables()),
+      ],
+    );
+  }
+
+  // ── Screen: inflow custody receive ───────────────────────────────
+  Widget _buildCustodyReceive() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildHeader(
+            "Adding to pool · Ksh ${widget.amount.toInt()}",
+            backScreen: 'inflow_not_mine'),
+        const SizedBox(height: 16),
+        const Text("What pool is this for?",
+            style: TextStyle(fontSize: 12, color: Colors.grey)),
+        const SizedBox(height: 6),
+        TextField(
+          controller: _noteController,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'e.g. Fuel float, Westlands job',
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+        ),
+        const SizedBox(height: 12),
+        _saveBtn('Save', () => _saveCustodyReceive()),
+      ],
+    );
+  }
+
+  // ── Screen: receivable match ──────────────────────────────────────
+  Widget _buildReceivableMatch() {
+    if (_loadingReceivables) {
+      return Column(
+        children: [
+          _buildHeader(
+              "Clears what I'm owed · Ksh ${widget.amount.toInt()}",
+              backScreen: 'inflow_not_mine'),
+          const SizedBox(height: 24),
+          const Center(child: CircularProgressIndicator()),
+          const SizedBox(height: 24),
+        ],
+      );
+    }
+
+    if (_receivables.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildHeader(
+              "Clears what I'm owed · Ksh ${widget.amount.toInt()}",
+              backScreen: 'inflow_not_mine'),
+          const SizedBox(height: 16),
+          const Text(
+            'No open receivables found.\nTag this as True income instead.',
+            style: TextStyle(fontSize: 13, color: Colors.grey),
+          ),
+          const SizedBox(height: 16),
+          _saveBtn('Save as income', () => _saveIncome()),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildHeader(
+            "Clears what I'm owed · Ksh ${widget.amount.toInt()}",
+            backScreen: 'inflow_not_mine'),
+        const SizedBox(height: 8),
+        const Text('Which receivable does this clear?',
+            style: TextStyle(fontSize: 12, color: Colors.grey)),
+        const SizedBox(height: 10),
+        // Limit height so card doesn't overflow screen
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 220),
+          child: ListView.separated(
+            shrinkWrap: true,
+            itemCount: _receivables.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 6),
+            itemBuilder: (_, i) {
+              final r = _receivables[i];
+              final label = r.receivableLabel ?? 'Unnamed';
+              final owed = r.amount;
+              final incoming = widget.amount;
+              // Calculate what will happen on tap
+              final cleared = incoming >= owed ? owed : incoming;
+              final income = incoming > owed ? incoming - owed : 0.0;
+
+              return GestureDetector(
+                onTap: () => _saveReceivableMatch(r),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey[300]!),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.receipt_long,
+                          color: Colors.blue, size: 18),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(label,
+                                style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500)),
+                            Text(
+                              income > 0
+                                  ? 'Clears Ksh ${cleared.toInt()} · Ksh ${income.toInt()} income'
+                                  : 'Clears Ksh ${cleared.toInt()} of Ksh ${owed.toInt()} owed',
+                              style: TextStyle(
+                                  fontSize: 11, color: Colors.grey[600]),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right,
+                          color: Colors.grey, size: 16),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Load receivables then switch screen ───────────────────────────
+  Future<void> _loadReceivables() async {
+    setState(() {
+      _loadingReceivables = true;
+      _screen = 'receivable_match';
+    });
+    final results = await db.getOpenReceivables();
+    setState(() {
+      _receivables = results;
+      _loadingReceivables = false;
+    });
+  }
+
   // ── Save methods ──────────────────────────────────────────────────
+
+  // Transfer — works for both in and out via widget.direction
   Future<void> _saveTransfer(String bucketName) async {
     await db.insertTransaction(TransactionsCompanion(
       txCode: drift.Value(widget.txCode),
       amount: drift.Value(widget.amount),
       recipient: drift.Value(widget.recipient),
-      direction: drift.Value('out'),
-      type: drift.Value('transfer'),
+      direction: drift.Value(widget.direction),
+      type: drift.Value(
+          widget.direction == 'out' ? 'transfer' : 'transfer_in'),
       bucketName: drift.Value(bucketName),
       balanceAfter: drift.Value(widget.balance),
       rawSms: drift.Value(''),
@@ -350,7 +540,7 @@ class _TagCardState extends State<_TagCard> {
     if (mounted) Navigator.pop(context);
   }
 
-  Future<void> _saveCustody() async {
+  Future<void> _saveCustodySpend() async {
     final label = _noteController.text.trim().isEmpty
         ? 'Custody – ${DateTime.now().day}/${DateTime.now().month}'
         : _noteController.text.trim();
@@ -404,6 +594,79 @@ class _TagCardState extends State<_TagCard> {
     if (mounted) Navigator.pop(context);
   }
 
+  Future<void> _saveCustodyReceive() async {
+    final label = _noteController.text.trim().isEmpty
+        ? 'Custody – ${DateTime.now().day}/${DateTime.now().month}'
+        : _noteController.text.trim();
+    await db.insertTransaction(TransactionsCompanion(
+      txCode: drift.Value(widget.txCode),
+      amount: drift.Value(widget.amount),
+      recipient: drift.Value(widget.recipient),
+      direction: drift.Value('in'),
+      type: drift.Value('custody_receive'),
+      poolLabel: drift.Value(label),
+      balanceAfter: drift.Value(widget.balance),
+      rawSms: drift.Value(''),
+      createdAt: drift.Value(DateTime.now()),
+      isTagged: drift.Value(true),
+    ));
+    if (mounted) Navigator.pop(context);
+  }
+
+  Future<void> _saveReceivableMatch(Transaction receivable) async {
+    final owed = receivable.amount;
+    final incoming = widget.amount;
+
+    // Always save the receivable_clear record
+    await db.insertTransaction(TransactionsCompanion(
+      txCode: drift.Value(widget.txCode),
+      amount: drift.Value(incoming >= owed ? owed : incoming),
+      recipient: drift.Value(widget.recipient),
+      direction: drift.Value('in'),
+      type: drift.Value('receivable_clear'),
+      receivableLabel: drift.Value(receivable.receivableLabel),
+      balanceAfter: drift.Value(widget.balance),
+      rawSms: drift.Value(''),
+      createdAt: drift.Value(DateTime.now()),
+      isTagged: drift.Value(true),
+    ));
+
+    // If paid more than owed — the excess is real income
+    if (incoming > owed) {
+      final excess = incoming - owed;
+      await db.insertTransaction(TransactionsCompanion(
+        txCode: drift.Value('${widget.txCode}_income'),
+        amount: drift.Value(excess),
+        recipient: drift.Value(widget.recipient),
+        direction: drift.Value('in'),
+        type: drift.Value('income'),
+        receivableLabel: drift.Value(
+            '${receivable.receivableLabel} – income split'),
+        balanceAfter: drift.Value(widget.balance),
+        rawSms: drift.Value('auto-split from receivable'),
+        createdAt: drift.Value(DateTime.now()),
+        isTagged: drift.Value(true),
+      ));
+    }
+
+    if (mounted) Navigator.pop(context);
+  }
+
+  Future<void> _saveIncome() async {
+    await db.insertTransaction(TransactionsCompanion(
+      txCode: drift.Value(widget.txCode),
+      amount: drift.Value(widget.amount),
+      recipient: drift.Value(widget.recipient),
+      direction: drift.Value('in'),
+      type: drift.Value('income'),
+      balanceAfter: drift.Value(widget.balance),
+      rawSms: drift.Value(''),
+      createdAt: drift.Value(DateTime.now()),
+      isTagged: drift.Value(true),
+    ));
+    if (mounted) Navigator.pop(context);
+  }
+
   Future<void> _saveUntagged() async {
     await db.insertTransaction(TransactionsCompanion(
       txCode: drift.Value(widget.txCode),
@@ -418,13 +681,15 @@ class _TagCardState extends State<_TagCard> {
     if (mounted) Navigator.pop(context);
   }
 
-  // ── Shared UI helpers ─────────────────────────────────────────────
-  Widget _rootBtn(IconData icon, String label, Color color, VoidCallback onTap) {
+  // ── UI helpers ────────────────────────────────────────────────────
+  Widget _rootBtn(
+      IconData icon, String label, Color color, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           border: Border.all(color: Colors.grey[300]!),
           borderRadius: BorderRadius.circular(10),
@@ -433,8 +698,11 @@ class _TagCardState extends State<_TagCard> {
           children: [
             Icon(icon, color: color, size: 18),
             const SizedBox(width: 10),
-            Text(label,
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+            Expanded(
+              child: Text(label,
+                  style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w500)),
+            ),
           ],
         ),
       ),

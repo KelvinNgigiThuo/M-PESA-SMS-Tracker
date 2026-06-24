@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'database/app_database.dart';
 import 'overlay_channel.dart';
+import 'dashboard_screen.dart';
 
 final AppDatabase db = AppDatabase();
 
@@ -23,60 +23,7 @@ class MpesaTrackerApp extends StatelessWidget {
         scaffoldBackgroundColor: Colors.transparent,
         useMaterial3: true,
       ),
-      home: const HomeScreen(),
-    );
-  }
-}
-
-class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
-
-  @override
-  State<HomeScreen> createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends State<HomeScreen> {
-  static const _channel = MethodChannel('com.kelvin.mpesa/overlay');
-
-  @override
-  void initState() {
-    super.initState();
-    _channel.setMethodCallHandler(_handleNativeCall);
-    _signalReady();
-  }
-
-  Future<void> _signalReady() async {
-    try {
-      await _channel.invokeMethod('flutterReady');
-    } catch (e) {
-      // Not a problem — TagCardActivity will retry
-    }
-  }
-
-  Future<dynamic> _handleNativeCall(MethodCall call) async {
-    if (call.method == 'showTagCard') {
-      final data = Map<String, dynamic>.from(call.arguments);
-      if (mounted) {
-        await showTagCard(context, data);
-        try {
-          await _channel.invokeMethod('closeTagCard');
-        } catch (e) {
-          // Main app doesn't need to close — only TagCardActivity does
-        }
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: const Center(
-        child: Text(
-          'Waiting for M-Pesa SMS...',
-          style: TextStyle(fontSize: 16, color: Colors.grey),
-        ),
-      ),
+      home: const DashboardScreen(),
     );
   }
 }

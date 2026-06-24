@@ -45,6 +45,13 @@ class AppDatabase extends _$AppDatabase {
         ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
       .get();
 
+  // Open receivables — for matching incoming payments against
+  Future<List<Transaction>> getOpenReceivables() =>
+      (select(transactions)
+        ..where((t) => t.type.equals('receivable_create'))
+        ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+      .get();
+
   // All transactions — for history later
   Stream<List<Transaction>> watchAll() =>
       (select(transactions)
