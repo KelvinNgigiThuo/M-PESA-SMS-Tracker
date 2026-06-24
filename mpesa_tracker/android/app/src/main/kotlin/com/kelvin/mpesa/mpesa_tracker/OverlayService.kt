@@ -106,16 +106,18 @@ class OverlayService : Service() {
                 }
                 MotionEvent.ACTION_UP -> {
                     if (!isDragging) {
-                        Log.d("OverlayService", "Bubble tapped — opening tag card")
-                        val transactionData = mapOf(
-                            "amount" to amount,
-                            "recipient" to recipient,
-                            "direction" to direction,
-                            "txCode" to txCode,
-                            "balance" to balance,
-                            "txCost" to txCost
-                        )
-                        MainActivity.instance?.sendToFlutter(transactionData)
+                        Log.d("OverlayService", "Bubble tapped — opening tag card overlay")
+                        val intent = Intent(this@OverlayService, TagCardActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                            putExtra("amount", amount)
+                            putExtra("recipient", recipient)
+                            putExtra("direction", direction)
+                            putExtra("txCode", txCode)
+                            putExtra("balance", balance)
+                            putExtra("txCost", txCost)
+                            putExtra("fromBubble", true)
+                        }
+                        this@OverlayService.startActivity(intent)
                         removeBubble()
                         stopSelf()
                     }

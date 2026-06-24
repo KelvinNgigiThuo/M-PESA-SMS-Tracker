@@ -27,6 +27,15 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".TagCardActivity"
+            android:theme="@style/TransparentActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:windowSoftInputMode="adjustResize" />
+
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
@@ -38,6 +47,7 @@
                 <action android:name="android.provider.Telephony.SMS_RECEIVED" />
             </intent-filter>
         </receiver>
+
         <service
             android:name=".OverlayService"
             android:exported="false" />

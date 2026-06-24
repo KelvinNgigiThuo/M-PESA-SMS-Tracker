@@ -11,7 +11,6 @@ Future<void> showTagCard(BuildContext context, Map<String, dynamic> data) async 
   final txCode = data['txCode'] as String;
   final balance = (data['balance'] as num).toDouble();
 
-  // Auto-save the transaction fee silently before showing card
   if (txCost > 0) {
     await db.insertTransaction(TransactionsCompanion(
       txCode: drift.Value('${txCode}_fee'),
@@ -33,6 +32,7 @@ Future<void> showTagCard(BuildContext context, Map<String, dynamic> data) async 
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
+    isDismissible: true,
     builder: (_) => _TagCard(
       amount: amount,
       recipient: recipient,
@@ -43,7 +43,8 @@ Future<void> showTagCard(BuildContext context, Map<String, dynamic> data) async 
   );
 }
 
-class _TagCard extends StatelessWidget {
+// ── Single stateful card that manages its own screen flow ────────────
+class _TagCard extends StatefulWidget {
   final double amount;
   final String recipient;
   final String direction;
@@ -59,6 +60,26 @@ class _TagCard extends StatelessWidget {
   });
 
   @override
+  State<_TagCard> createState() => _TagCardState();
+}
+
+class _TagCardState extends State<_TagCard> {
+  // Tracks which screen we're on
+  String _screen = 'root';
+
+  // For expense screen
+  String? _selectedCategory;
+
+  // For note screens
+  final _noteController = TextEditingController();
+
+  @override
+  void dispose() {
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.all(12),
@@ -66,302 +87,273 @@ class _TagCard extends StatelessWidget {
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(20),
       ),
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+      padding: EdgeInsets.fromLTRB(
+        16, 12, 16,
+        MediaQuery.of(context).viewInsets.bottom + 32,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           // Handle bar
           Container(
-            width: 36,
-            height: 4,
+            width: 36, height: 4,
             decoration: BoxDecoration(
               color: Colors.grey[300],
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          const SizedBox(height: 16),
-          // Amount + recipient
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Ksh ${amount % 1 == 0 ? amount.toInt() : amount.toStringAsFixed(2)}',
-                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
-              ),
-              IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: () => _saveUntagged(context),
-              ),
-            ],
-          ),
-          Text(
-            '${direction == "out" ? "to" : "from"} $recipient',
-            style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-          ),
-          const SizedBox(height: 20),
-          // Root buttons — outflow only for M4
-          if (direction == 'out') ...[
-            _RootButton(
-              icon: Icons.account_balance,
-              label: 'My account',
-              color: Colors.blue,
-              onTap: () => _showBucketPicker(context),
-            ),
-            const SizedBox(height: 8),
-            _RootButton(
-              icon: Icons.block,
-              label: 'Not mine',
-              color: Colors.blue,
-              onTap: () => _showNotMine(context),
-            ),
-            const SizedBox(height: 8),
-            _RootButton(
-              icon: Icons.receipt_long,
-              label: 'True expense',
-              color: Colors.red,
-              onTap: () => _showExpense(context),
-            ),
-          ] else ...[
-            // Inflow placeholder — M5
-            const Text(
-              'Inflow tagging coming in next build',
-              style: TextStyle(color: Colors.grey),
-            ),
-            const SizedBox(height: 12),
-            _SaveButton(label: 'Save as untagged', onTap: () => _saveUntagged(context)),
-          ],
+          const SizedBox(height: 12),
+          // Route to correct screen
+          _buildScreen(),
         ],
       ),
     );
   }
 
-  // ── Branch: My account ──────────────────────────────────────────────
-  void _showBucketPicker(BuildContext context) {
-    Navigator.pop(context);
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _BucketPicker(
-        amount: amount, txCode: txCode, recipient: recipient, balance: balance,
-      ),
+  Widget _buildScreen() {
+    switch (_screen) {
+      case 'root':         return _buildRoot();
+      case 'bucket':       return _buildBucketPicker();
+      case 'not_mine':     return _buildNotMine();
+      case 'custody':      return _buildCustodyNote();
+      case 'reimbursable': return _buildReimbursableNote();
+      case 'expense':      return _buildExpense();
+      default:             return _buildRoot();
+    }
+  }
+
+  // ── Header shared across all screens ──────────────────────────────
+  Widget _buildHeader(String label, {String? backScreen}) {
+    return Row(
+      children: [
+        if (backScreen != null)
+          GestureDetector(
+            onTap: () => setState(() => _screen = backScreen),
+            child: const Icon(Icons.chevron_left, color: Colors.grey),
+          ),
+        if (backScreen != null) const SizedBox(width: 4),
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+        ),
+        GestureDetector(
+          onTap: () => _saveUntagged(),
+          child: const Icon(Icons.close, color: Colors.grey, size: 18),
+        ),
+      ],
     );
   }
 
-  // ── Branch: Not mine ────────────────────────────────────────────────
-  void _showNotMine(BuildContext context) {
-    Navigator.pop(context);
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _NotMineSubChoice(
-        amount: amount, txCode: txCode, recipient: recipient, balance: balance,
-      ),
+  // ── Screen: root ──────────────────────────────────────────────────
+  Widget _buildRoot() {
+    final amountLabel = 'Ksh ${widget.amount.toInt()}';
+    final subLabel = '${widget.direction == "out" ? "to" : "from"} ${widget.recipient}';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(amountLabel,
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
+            GestureDetector(
+              onTap: () => _saveUntagged(),
+              child: const Icon(Icons.close, color: Colors.grey),
+            ),
+          ],
+        ),
+        Text(subLabel,
+            style: TextStyle(fontSize: 13, color: Colors.grey[600])),
+        const SizedBox(height: 20),
+        if (widget.direction == 'out') ...[
+          _rootBtn(Icons.account_balance, 'My account', Colors.blue,
+              () => setState(() => _screen = 'bucket')),
+          const SizedBox(height: 8),
+          _rootBtn(Icons.block, 'Not mine', Colors.blue,
+              () => setState(() => _screen = 'not_mine')),
+          const SizedBox(height: 8),
+          _rootBtn(Icons.receipt_long, 'True expense', Colors.red,
+              () => setState(() => _screen = 'expense')),
+        ] else ...[
+          const Text('Inflow tagging coming in M5',
+              style: TextStyle(color: Colors.grey)),
+          const SizedBox(height: 12),
+          _saveBtn('Save as untagged', () => _saveUntagged()),
+        ],
+      ],
     );
   }
 
-  // ── Branch: True expense ────────────────────────────────────────────
-  void _showExpense(BuildContext context) {
-    Navigator.pop(context);
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _ExpensePicker(
-        amount: amount, txCode: txCode, recipient: recipient, balance: balance,
-      ),
+  // ── Screen: bucket picker ─────────────────────────────────────────
+  Widget _buildBucketPicker() {
+    final buckets = [
+      {'name': 'NCBA', 'icon': Icons.account_balance},
+      {'name': 'KCB Bank', 'icon': Icons.account_balance},
+      {'name': 'M-Shwari', 'icon': Icons.savings},
+      {'name': 'KCB M-Pesa', 'icon': Icons.account_balance_wallet},
+      {'name': 'Money Market', 'icon': Icons.trending_up},
+      {'name': 'Company', 'icon': Icons.business},
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildHeader('My account · Ksh ${widget.amount.toInt()}',
+            backScreen: 'root'),
+        const SizedBox(height: 16),
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
+          childAspectRatio: 2.2,
+          physics: const NeverScrollableScrollPhysics(),
+          children: buckets.map((b) {
+            return GestureDetector(
+              onTap: () => _saveTransfer(b['name'] as String),
+              child: Container(
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey[300]!),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(b['icon'] as IconData, color: Colors.blue, size: 20),
+                    const SizedBox(height: 4),
+                    Text(b['name'] as String,
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500)),
+                  ],
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
     );
   }
 
-  Future<void> _saveUntagged(BuildContext context) async {
+  // ── Screen: not mine sub-choice ───────────────────────────────────
+  Widget _buildNotMine() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildHeader('Not mine · Ksh ${widget.amount.toInt()}',
+            backScreen: 'root'),
+        const SizedBox(height: 16),
+        _rootBtn(Icons.wallet, "I'm holding their money", Colors.blue,
+            () => setState(() { _noteController.clear(); _screen = 'custody'; })),
+        const SizedBox(height: 8),
+        _rootBtn(Icons.undo, "I'll be paid back", Colors.blue,
+            () => setState(() { _noteController.clear(); _screen = 'reimbursable'; })),
+      ],
+    );
+  }
+
+  // ── Screen: custody note ──────────────────────────────────────────
+  Widget _buildCustodyNote() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildHeader("Holding their money · Ksh ${widget.amount.toInt()}",
+            backScreen: 'not_mine'),
+        const SizedBox(height: 16),
+        const Text("What's this for?",
+            style: TextStyle(fontSize: 12, color: Colors.grey)),
+        const SizedBox(height: 6),
+        TextField(
+          controller: _noteController,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'e.g. Fuel float, Westlands job',
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+        ),
+        const SizedBox(height: 12),
+        _saveBtn('Save', () => _saveCustody()),
+      ],
+    );
+  }
+
+  // ── Screen: reimbursable note ─────────────────────────────────────
+  Widget _buildReimbursableNote() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildHeader("Pay me back · Ksh ${widget.amount.toInt()}",
+            backScreen: 'not_mine'),
+        const SizedBox(height: 16),
+        const Text("Which job is this for?",
+            style: TextStyle(fontSize: 12, color: Colors.grey)),
+        const SizedBox(height: 6),
+        TextField(
+          controller: _noteController,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'e.g. Client X supplies',
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+        ),
+        const SizedBox(height: 12),
+        _saveBtn('Save', () => _saveReimbursable()),
+      ],
+    );
+  }
+
+  // ── Screen: expense category ──────────────────────────────────────
+  Widget _buildExpense() {
+    const categories = ['Food', 'Transport', 'Supplies', 'Bills', 'Other'];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildHeader('True expense · Ksh ${widget.amount.toInt()}',
+            backScreen: 'root'),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: categories.map((c) {
+            return ChoiceChip(
+              label: Text(c),
+              selected: _selectedCategory == c,
+              onSelected: (_) => setState(() => _selectedCategory = c),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 16),
+        _saveBtn('Save',
+            _selectedCategory == null ? null : () => _saveExpense()),
+      ],
+    );
+  }
+
+  // ── Save methods ──────────────────────────────────────────────────
+  Future<void> _saveTransfer(String bucketName) async {
     await db.insertTransaction(TransactionsCompanion(
-      txCode: drift.Value(txCode),
-      amount: drift.Value(amount),
-      recipient: drift.Value(recipient),
-      direction: drift.Value(direction),
-      balanceAfter: drift.Value(balance),
-      rawSms: drift.Value(''),
-      createdAt: drift.Value(DateTime.now()),
-      isTagged: drift.Value(false),
-    ));
-    if (context.mounted) Navigator.pop(context);
-  }
-}
-
-// ── Bucket picker ────────────────────────────────────────────────────
-class _BucketPicker extends StatelessWidget {
-  final double amount;
-  final String txCode;
-  final String recipient;
-  final double balance;
-
-  const _BucketPicker({
-    required this.amount, required this.txCode,
-    required this.recipient, required this.balance,
-  });
-
-  static const buckets = [
-    {'name': 'NCBA', 'icon': Icons.account_balance, 'group': 'bank'},
-    {'name': 'KCB Bank', 'icon': Icons.account_balance, 'group': 'bank'},
-    {'name': 'M-Shwari', 'icon': Icons.savings, 'group': 'mobile_savings'},
-    {'name': 'KCB M-Pesa', 'icon': Icons.account_balance_wallet, 'group': 'mobile_savings'},
-    {'name': 'Money Market', 'icon': Icons.trending_up, 'group': 'investment'},
-    {'name': 'Company', 'icon': Icons.business, 'group': 'investment'},
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return _CardShell(
-      backLabel: 'My account · Ksh ${amount.toInt()}',
-      child: GridView.count(
-        crossAxisCount: 2,
-        shrinkWrap: true,
-        mainAxisSpacing: 8,
-        crossAxisSpacing: 8,
-        childAspectRatio: 2.2,
-        physics: const NeverScrollableScrollPhysics(),
-        children: buckets.map((b) {
-          return _GridTile(
-            icon: b['icon'] as IconData,
-            label: b['name'] as String,
-            onTap: () => _save(context, b['name'] as String),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  Future<void> _save(BuildContext context, String bucketName) async {
-    await db.insertTransaction(TransactionsCompanion(
-      txCode: drift.Value(txCode),
-      amount: drift.Value(amount),
-      recipient: drift.Value(recipient),
+      txCode: drift.Value(widget.txCode),
+      amount: drift.Value(widget.amount),
+      recipient: drift.Value(widget.recipient),
       direction: drift.Value('out'),
       type: drift.Value('transfer'),
       bucketName: drift.Value(bucketName),
-      balanceAfter: drift.Value(balance),
+      balanceAfter: drift.Value(widget.balance),
       rawSms: drift.Value(''),
       createdAt: drift.Value(DateTime.now()),
       isTagged: drift.Value(true),
     ));
-    if (context.mounted) Navigator.pop(context);
-  }
-}
-
-// ── Not mine sub-choice ──────────────────────────────────────────────
-class _NotMineSubChoice extends StatelessWidget {
-  final double amount;
-  final String txCode;
-  final String recipient;
-  final double balance;
-
-  const _NotMineSubChoice({
-    required this.amount, required this.txCode,
-    required this.recipient, required this.balance,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return _CardShell(
-      backLabel: 'Not mine · Ksh ${amount.toInt()}',
-      child: Column(
-        children: [
-          _RootButton(
-            icon: Icons.wallet,
-            label: "I'm holding their money",
-            color: Colors.blue,
-            onTap: () => _showCustody(context),
-          ),
-          const SizedBox(height: 8),
-          _RootButton(
-            icon: Icons.undo,
-            label: "I'll be paid back",
-            color: Colors.blue,
-            onTap: () => _showReimbursable(context),
-          ),
-        ],
-      ),
-    );
+    if (mounted) Navigator.pop(context);
   }
 
-  void _showCustody(BuildContext context) {
-    Navigator.pop(context);
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (_) => _CustodyNote(
-        amount: amount, txCode: txCode,
-        recipient: recipient, balance: balance,
-      ),
-    );
-  }
-
-  void _showReimbursable(BuildContext context) {
-    Navigator.pop(context);
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (_) => _ReimbursableNote(
-        amount: amount, txCode: txCode,
-        recipient: recipient, balance: balance,
-      ),
-    );
-  }
-}
-
-// ── Custody note ─────────────────────────────────────────────────────
-class _CustodyNote extends StatefulWidget {
-  final double amount;
-  final String txCode;
-  final String recipient;
-  final double balance;
-
-  const _CustodyNote({
-    required this.amount, required this.txCode,
-    required this.recipient, required this.balance,
-  });
-
-  @override
-  State<_CustodyNote> createState() => _CustodyNoteState();
-}
-
-class _CustodyNoteState extends State<_CustodyNote> {
-  final _controller = TextEditingController();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: _CardShell(
-        backLabel: "Holding their money · Ksh ${widget.amount.toInt()}",
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text("What's this for?",
-                style: TextStyle(fontSize: 12, color: Colors.grey)),
-            const SizedBox(height: 6),
-            TextField(
-              controller: _controller,
-              autofocus: true,
-              decoration: const InputDecoration(
-                hintText: 'e.g. Fuel float, Westlands job',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-            ),
-            const SizedBox(height: 12),
-            _SaveButton(label: 'Save', onTap: () => _save(context)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _save(BuildContext context) async {
-    final label = _controller.text.trim().isEmpty
+  Future<void> _saveCustody() async {
+    final label = _noteController.text.trim().isEmpty
         ? 'Custody – ${DateTime.now().day}/${DateTime.now().month}'
-        : _controller.text.trim();
-
+        : _noteController.text.trim();
     await db.insertTransaction(TransactionsCompanion(
       txCode: drift.Value(widget.txCode),
       amount: drift.Value(widget.amount),
@@ -374,63 +366,13 @@ class _CustodyNoteState extends State<_CustodyNote> {
       createdAt: drift.Value(DateTime.now()),
       isTagged: drift.Value(true),
     ));
-    if (context.mounted) Navigator.pop(context);
-  }
-}
-
-// ── Reimbursable note ────────────────────────────────────────────────
-class _ReimbursableNote extends StatefulWidget {
-  final double amount;
-  final String txCode;
-  final String recipient;
-  final double balance;
-
-  const _ReimbursableNote({
-    required this.amount, required this.txCode,
-    required this.recipient, required this.balance,
-  });
-
-  @override
-  State<_ReimbursableNote> createState() => _ReimbursableNoteState();
-}
-
-class _ReimbursableNoteState extends State<_ReimbursableNote> {
-  final _controller = TextEditingController();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: _CardShell(
-        backLabel: "Pay me back · Ksh ${widget.amount.toInt()}",
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text("Which job is this for?",
-                style: TextStyle(fontSize: 12, color: Colors.grey)),
-            const SizedBox(height: 6),
-            TextField(
-              controller: _controller,
-              autofocus: true,
-              decoration: const InputDecoration(
-                hintText: 'e.g. Client X supplies',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-            ),
-            const SizedBox(height: 12),
-            _SaveButton(label: 'Save', onTap: () => _save(context)),
-          ],
-        ),
-      ),
-    );
+    if (mounted) Navigator.pop(context);
   }
 
-  Future<void> _save(BuildContext context) async {
-    final label = _controller.text.trim().isEmpty
+  Future<void> _saveReimbursable() async {
+    final label = _noteController.text.trim().isEmpty
         ? 'Reimbursement – ${DateTime.now().day}/${DateTime.now().month}'
-        : _controller.text.trim();
-
+        : _noteController.text.trim();
     await db.insertTransaction(TransactionsCompanion(
       txCode: drift.Value(widget.txCode),
       amount: drift.Value(widget.amount),
@@ -443,141 +385,41 @@ class _ReimbursableNoteState extends State<_ReimbursableNote> {
       createdAt: drift.Value(DateTime.now()),
       isTagged: drift.Value(true),
     ));
-    if (context.mounted) Navigator.pop(context);
-  }
-}
-
-// ── Expense picker ───────────────────────────────────────────────────
-class _ExpensePicker extends StatefulWidget {
-  final double amount;
-  final String txCode;
-  final String recipient;
-  final double balance;
-
-  const _ExpensePicker({
-    required this.amount, required this.txCode,
-    required this.recipient, required this.balance,
-  });
-
-  @override
-  State<_ExpensePicker> createState() => _ExpensePickerState();
-}
-
-class _ExpensePickerState extends State<_ExpensePicker> {
-  String? selected;
-
-  static const categories = [
-    'Food', 'Transport', 'Supplies', 'Bills', 'Other'
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return _CardShell(
-      backLabel: 'True expense · Ksh ${widget.amount.toInt()}',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: categories.map((c) {
-              final isSelected = selected == c;
-              return ChoiceChip(
-                label: Text(c),
-                selected: isSelected,
-                onSelected: (_) => setState(() => selected = c),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 16),
-          _SaveButton(
-            label: 'Save',
-            onTap: selected == null ? null : () => _save(context),
-          ),
-        ],
-      ),
-    );
+    if (mounted) Navigator.pop(context);
   }
 
-  Future<void> _save(BuildContext context) async {
+  Future<void> _saveExpense() async {
     await db.insertTransaction(TransactionsCompanion(
       txCode: drift.Value(widget.txCode),
       amount: drift.Value(widget.amount),
       recipient: drift.Value(widget.recipient),
       direction: drift.Value('out'),
       type: drift.Value('expense'),
-      category: drift.Value(selected!),
+      category: drift.Value(_selectedCategory!),
       balanceAfter: drift.Value(widget.balance),
       rawSms: drift.Value(''),
       createdAt: drift.Value(DateTime.now()),
       isTagged: drift.Value(true),
     ));
-    if (context.mounted) Navigator.pop(context);
+    if (mounted) Navigator.pop(context);
   }
-}
 
-// ── Shared UI components ─────────────────────────────────────────────
-class _CardShell extends StatelessWidget {
-  final String backLabel;
-  final Widget child;
-
-  const _CardShell({required this.backLabel, required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(
-              width: 36, height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              GestureDetector(
-                onTap: () => Navigator.pop(context),
-                child: const Icon(Icons.chevron_left, color: Colors.grey),
-              ),
-              const SizedBox(width: 4),
-              Text(backLabel,
-                  style: const TextStyle(fontSize: 12, color: Colors.grey)),
-            ],
-          ),
-          const SizedBox(height: 16),
-          child,
-        ],
-      ),
-    );
+  Future<void> _saveUntagged() async {
+    await db.insertTransaction(TransactionsCompanion(
+      txCode: drift.Value(widget.txCode),
+      amount: drift.Value(widget.amount),
+      recipient: drift.Value(widget.recipient),
+      direction: drift.Value(widget.direction),
+      balanceAfter: drift.Value(widget.balance),
+      rawSms: drift.Value(''),
+      createdAt: drift.Value(DateTime.now()),
+      isTagged: drift.Value(false),
+    ));
+    if (mounted) Navigator.pop(context);
   }
-}
 
-class _RootButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _RootButton({
-    required this.icon, required this.label,
-    required this.color, required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
+  // ── Shared UI helpers ─────────────────────────────────────────────
+  Widget _rootBtn(IconData icon, String label, Color color, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -591,51 +433,15 @@ class _RootButton extends StatelessWidget {
           children: [
             Icon(icon, color: color, size: 18),
             const SizedBox(width: 10),
-            Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+            Text(label,
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
           ],
         ),
       ),
     );
   }
-}
 
-class _GridTile extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  const _GridTile({required this.icon, required this.label, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey[300]!),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: Colors.blue, size: 20),
-            const SizedBox(height: 4),
-            Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SaveButton extends StatelessWidget {
-  final String label;
-  final VoidCallback? onTap;
-
-  const _SaveButton({required this.label, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _saveBtn(String label, VoidCallback? onTap) {
     return GestureDetector(
       onTap: onTap,
       child: Container(

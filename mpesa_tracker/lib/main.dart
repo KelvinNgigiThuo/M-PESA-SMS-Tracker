@@ -20,6 +20,7 @@ class MpesaTrackerApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1A73E8)),
+        scaffoldBackgroundColor: Colors.transparent,
         useMaterial3: true,
       ),
       home: const HomeScreen(),
@@ -41,6 +42,15 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _channel.setMethodCallHandler(_handleNativeCall);
+    _signalReady();
+  }
+
+  Future<void> _signalReady() async {
+    try {
+      await _channel.invokeMethod('flutterReady');
+    } catch (e) {
+      // Not a problem — TagCardActivity will retry
+    }
   }
 
   Future<dynamic> _handleNativeCall(MethodCall call) async {
@@ -48,6 +58,11 @@ class _HomeScreenState extends State<HomeScreen> {
       final data = Map<String, dynamic>.from(call.arguments);
       if (mounted) {
         await showTagCard(context, data);
+        try {
+          await _channel.invokeMethod('closeTagCard');
+        } catch (e) {
+          // Main app doesn't need to close — only TagCardActivity does
+        }
       }
     }
   }
@@ -55,7 +70,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('M-Pesa Tracker')),
+      backgroundColor: Colors.transparent,
       body: const Center(
         child: Text(
           'Waiting for M-Pesa SMS...',
