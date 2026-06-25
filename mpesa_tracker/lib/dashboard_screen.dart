@@ -20,6 +20,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   double _lastMpesaBalance = 0;
   double _custodyHeld = 0;
   double _openReceivables = 0;
+  Map<String, double> _bucketBalances = {};
 
   @override
   void initState() {
@@ -78,17 +79,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (t.type == 'receivable_clear') receivables -= t.amount;
     }
 
+    final bucketBalances = await db.getBucketBalances();
+
     setState(() {
-        _transactions = all;
-        _lastMpesaBalance = lastBalance;
-        _custodyHeld = custody.clamp(0, double.infinity);
-        _openReceivables = receivables.clamp(0, double.infinity);
-        _loading = false;
+      _transactions = all;
+      _lastMpesaBalance = lastBalance;
+      _custodyHeld = custody.clamp(0, double.infinity);
+      _openReceivables = receivables.clamp(0, double.infinity);
+      _bucketBalances = bucketBalances;
+      _loading = false;
     });
     }
 
+  double get _totalBucketBalance =>
+      _bucketBalances.values.fold(0.0, (sum, v) => sum + v);
+
   double get _trueNetWorth =>
-      _lastMpesaBalance - _custodyHeld + _openReceivables;
+      _lastMpesaBalance + _totalBucketBalance - _custodyHeld + _openReceivables;
 
   @override
   Widget build(BuildContext context) {

@@ -52,6 +52,28 @@ class AppDatabase extends _$AppDatabase {
         ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
       .get();
 
+  // Sum all transfers per bucket — positive for transfers in, negative for transfers out
+  Future<Map<String, double>> getBucketBalances() async {
+    final all = await select(transactions).get();
+    final Map<String, double> balances = {};
+
+    for (final t in all) {
+      if (t.bucketName == null) continue;
+      final bucket = t.bucketName!;
+      final current = balances[bucket] ?? 0.0;
+
+      if (t.type == 'transfer') {
+        // Money left M-Pesa and went into this bucket
+        balances[bucket] = current + t.amount;
+      } else if (t.type == 'transfer_in') {
+        // Money came back from this bucket into M-Pesa
+        balances[bucket] = current - t.amount;
+      }
+    }
+
+    return balances;
+  }
+
   // All transactions — for history later
   Stream<List<Transaction>> watchAll() =>
       (select(transactions)
