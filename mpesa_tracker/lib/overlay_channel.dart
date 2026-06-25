@@ -203,11 +203,14 @@ class _TagCardState extends State<_TagCard> {
         : 'From my account · Ksh ${widget.amount.toInt()}';
 
     final buckets = [
+      {'name': 'Other M-Pesa', 'icon': Icons.phone_android},
       {'name': 'NCBA', 'icon': Icons.account_balance},
       {'name': 'KCB Bank', 'icon': Icons.account_balance},
-      {'name': 'M-Shwari', 'icon': Icons.savings},
       {'name': 'KCB M-Pesa', 'icon': Icons.account_balance_wallet},
-      {'name': 'Money Market', 'icon': Icons.trending_up},
+      {'name': 'M-Shwari', 'icon': Icons.savings},
+      {'name': 'M-Shwari Lock', 'icon': Icons.lock},
+      {'name': 'KCB M-Pesa Lock', 'icon': Icons.lock},
+      {'name': 'Etica', 'icon': Icons.trending_up},
       {'name': 'Company', 'icon': Icons.business},
     ];
 
@@ -244,9 +247,69 @@ class _TagCardState extends State<_TagCard> {
                 ),
               ),
             );
-          }).toList(),
+          }).toList()
+            ..add(
+              GestureDetector(
+                onTap: () => _showAddBucket(context),
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                        color: Colors.blue[200]!, style: BorderStyle.solid),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: const [
+                      Icon(Icons.add, color: Colors.blue, size: 20),
+                      SizedBox(height: 4),
+                      Text('Add new',
+                          style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.blue)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
         ),
       ],
+    );
+  }
+
+  void _showAddBucket(BuildContext context) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Add account',
+            style: TextStyle(fontSize: 15)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'e.g. CIC Money Market',
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              final name = controller.text.trim();
+              if (name.isNotEmpty) {
+                Navigator.pop(context);
+                _saveTransfer(name);
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
     );
   }
 
