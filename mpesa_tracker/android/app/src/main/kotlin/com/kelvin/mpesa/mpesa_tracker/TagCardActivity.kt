@@ -14,9 +14,9 @@ class TagCardActivity : FlutterActivity() {
 
     private var channel: MethodChannel? = null
 
-    // TextureView renders transparently unlike SurfaceView
     override fun getRenderMode(): RenderMode = RenderMode.texture
 
+    // No getCachedEngineId — boots its own engine fresh each time
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         channel = MethodChannel(

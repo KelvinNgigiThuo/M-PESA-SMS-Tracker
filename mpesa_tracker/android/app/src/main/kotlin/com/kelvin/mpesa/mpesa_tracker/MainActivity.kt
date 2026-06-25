@@ -1,19 +1,17 @@
 package com.kelvin.mpesa.mpesa_tracker
 
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
+import android.Manifest
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
-
-
-import android.content.pm.PackageManager
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
-import android.Manifest
 
 class MainActivity : FlutterActivity() {
 
@@ -49,22 +47,20 @@ class MainActivity : FlutterActivity() {
             )
         }
 
-        // App was launched by bubble tap
         if (intent?.getBooleanExtra("fromBubble", false) == true) {
             pendingData = extractTransactionData(intent)
-            Log.d("MainActivity", "Launched from bubble, data pending Flutter ready")
         }
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
-
+        channel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger, CHANNEL
+        )
         channel?.setMethodCallHandler { call, result ->
             if (call.method == "flutterReady") {
                 flutterReady = true
                 Log.d("MainActivity", "Flutter is ready")
-                // Send any data that arrived before Flutter was ready
                 pendingData?.let {
                     sendToFlutter(it)
                     pendingData = null
@@ -74,24 +70,17 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    // Called when app is already running and bubble brings it to foreground
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-
         if (intent.getBooleanExtra("fromBubble", false)) {
             val data = extractTransactionData(intent)
-            Log.d("MainActivity", "onNewIntent from bubble")
-            if (flutterReady) {
-                sendToFlutter(data)
-            } else {
-                pendingData = data
-            }
+            if (flutterReady) sendToFlutter(data)
+            else pendingData = data
         }
     }
 
     fun sendToFlutter(data: Map<String, Any>) {
-        Log.d("MainActivity", "Sending to Flutter: $data")
         runOnUiThread {
             channel?.invokeMethod("showTagCard", data)
         }
@@ -99,12 +88,12 @@ class MainActivity : FlutterActivity() {
 
     private fun extractTransactionData(intent: Intent): Map<String, Any> {
         return mapOf(
-            "amount" to (intent.getDoubleExtra("amount", 0.0)),
+            "amount"    to intent.getDoubleExtra("amount", 0.0),
             "recipient" to (intent.getStringExtra("recipient") ?: ""),
             "direction" to (intent.getStringExtra("direction") ?: "out"),
-            "txCode" to (intent.getStringExtra("txCode") ?: ""),
-            "balance" to (intent.getDoubleExtra("balance", 0.0)),
-            "txCost" to (intent.getDoubleExtra("txCost", 0.0))
+            "txCode"    to (intent.getStringExtra("txCode") ?: ""),
+            "balance"   to intent.getDoubleExtra("balance", 0.0),
+            "txCost"    to intent.getDoubleExtra("txCost", 0.0)
         )
     }
 }
