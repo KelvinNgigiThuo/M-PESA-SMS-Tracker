@@ -5,29 +5,31 @@
 
     <LinearLayout
         android:id="@+id/bubble_collapsed"
-        android:layout_width="60dp"
-        android:layout_height="60dp"
-        android:background="#1A73E8"
+        android:layout_width="64dp"
+        android:layout_height="64dp"
         android:orientation="vertical"
         android:gravity="center"
         android:elevation="8dp"
-        android:layout_gravity="bottom|end">
+        android:layout_gravity="bottom|end"
+        android:background="@drawable/bubble_background">
+
+        <TextView
+            android:id="@+id/bubble_arrow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:text="↑"/>
 
         <TextView
             android:id="@+id/bubble_amount"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textColor="#FFFFFF"
-            android:textSize="10sp"
+            android:textSize="11sp"
             android:textStyle="bold"
             android:text="0"/>
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textColor="#FFFFFF"
-            android:textSize="8sp"
-            android:text="KSH"/>
 
     </LinearLayout>
 

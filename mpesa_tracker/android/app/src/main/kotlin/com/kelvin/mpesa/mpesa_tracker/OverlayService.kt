@@ -3,12 +3,14 @@ package com.kelvin.mpesa.mpesa_tracker
 import android.app.Service
 import android.content.Intent
 import android.graphics.PixelFormat
+import android.graphics.drawable.GradientDrawable
 import android.os.IBinder
 import android.util.Log
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.WindowManager
+import android.widget.LinearLayout
 import android.widget.TextView
 
 class OverlayService : Service() {
@@ -67,6 +69,7 @@ class OverlayService : Service() {
         bubbleView = LayoutInflater.from(this)
             .inflate(R.layout.overlay_bubble, null)
 
+        // Format amount — strip decimals if .00
         val amountText = if (amount % 1.0 == 0.0)
             amount.toInt().toString()
         else
@@ -74,15 +77,18 @@ class OverlayService : Service() {
 
         bubbleView?.findViewById<TextView>(R.id.bubble_amount)?.text = amountText
 
+        // Set arrow direction
+        val arrowText = if (direction == "in") "↓" else "↑"
+        bubbleView?.findViewById<TextView>(R.id.bubble_arrow)?.text = arrowText
+
+        // Set bubble color using the drawable so the circle shape is preserved
+        val drawable = resources.getDrawable(R.drawable.bubble_background, null)
+                as GradientDrawable
         val bgColor = if (direction == "in") 0xFF1A73E8.toInt() else 0xFFE53935.toInt()
-        bubbleView?.findViewById<android.widget.LinearLayout>(R.id.bubble_collapsed)
-            ?.setBackgroundColor(bgColor)
+        drawable.setColor(bgColor)
+        bubbleView?.findViewById<LinearLayout>(R.id.bubble_collapsed)?.background = drawable
 
-        bubbleView?.findViewById<android.widget.LinearLayout>(R.id.bubble_collapsed)
-            ?.background = resources.getDrawable(android.R.drawable.btn_default_small, null)
-        bubbleView?.findViewById<android.widget.LinearLayout>(R.id.bubble_collapsed)
-            ?.setBackgroundColor(bgColor)
-
+        // Drag support
         var initialX = 0; var initialY = 0
         var initialTouchX = 0f; var initialTouchY = 0f
         var isDragging = false

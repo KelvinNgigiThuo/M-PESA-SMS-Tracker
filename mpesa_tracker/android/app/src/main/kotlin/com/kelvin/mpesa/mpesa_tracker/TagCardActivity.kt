@@ -16,6 +16,8 @@ class TagCardActivity : FlutterActivity() {
 
     override fun getRenderMode(): RenderMode = RenderMode.texture
 
+    override fun getDartEntrypointFunctionName(): String = "tagCardMain"
+
     // No getCachedEngineId — boots its own engine fresh each time
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
