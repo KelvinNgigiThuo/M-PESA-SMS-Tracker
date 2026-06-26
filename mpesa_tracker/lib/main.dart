@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'database/app_database.dart';
 import 'overlay_channel.dart';
 import 'dashboard_screen.dart';
+import 'setup_screen.dart';
 
 final AppDatabase db = AppDatabase();
 
@@ -20,11 +21,52 @@ class MpesaTrackerApp extends StatelessWidget {
       title: 'M-Pesa Tracker',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1A73E8)),
+        colorScheme: ColorScheme.fromSeed(
+            seedColor: const Color(0xFF1A73E8)),
         scaffoldBackgroundColor: Colors.transparent,
         useMaterial3: true,
       ),
-      home: const DashboardScreen(),
+      home: const AppEntry(),
+      routes: {
+        '/dashboard': (_) => const DashboardScreen(),
+        '/setup': (_) => const SetupScreen(),
+      },
+    );
+  }
+} // ← this closing brace was missing
+
+// Decides whether to show setup or dashboard on launch
+class AppEntry extends StatefulWidget {
+  const AppEntry({super.key});
+
+  @override
+  State<AppEntry> createState() => _AppEntryState();
+}
+
+class _AppEntryState extends State<AppEntry> {
+  @override
+  void initState() {
+    super.initState();
+    _route();
+  }
+
+  Future<void> _route() async {
+    final setupDone = await db.hasCompletedSetup();
+    if (!mounted) return;
+    if (setupDone) {
+      Navigator.of(context).pushReplacementNamed('/dashboard');
+    } else {
+      Navigator.of(context).pushReplacementNamed('/setup');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      backgroundColor: Color(0xFF1A73E8),
+      body: Center(
+        child: CircularProgressIndicator(color: Colors.white),
+      ),
     );
   }
 }
@@ -45,7 +87,8 @@ class TagCardApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         scaffoldBackgroundColor: Colors.transparent,
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1A73E8)),
+        colorScheme: ColorScheme.fromSeed(
+            seedColor: const Color(0xFF1A73E8)),
         useMaterial3: true,
       ),
       home: const TagCardHost(),
@@ -92,7 +135,7 @@ class _TagCardHostState extends State<TagCardHost> {
   Widget build(BuildContext context) {
     return const Scaffold(
       backgroundColor: Colors.transparent,
-      body: SizedBox.shrink(), // Renders nothing — transparent
+      body: SizedBox.shrink(),
     );
   }
 }
