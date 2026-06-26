@@ -10,6 +10,16 @@ Future<void> showTagCard(BuildContext context, Map<String, dynamic> data) async 
   final direction = data['direction'] as String;
   final txCode = data['txCode'] as String;
   final balance = (data['balance'] as num).toDouble();
+  // Auto-update secondary account balance if present (M-Shwari, KCB M-Pesa)
+  final secondaryBalance = (data['secondaryBalance'] as num?)?.toDouble() ?? 0.0;
+  final secondaryAccount = data['secondaryAccount'] as String? ?? '';
+
+  if (secondaryBalance > 0 && secondaryAccount.isNotEmpty) {
+    final account = await db.getAccountByName(secondaryAccount);
+    if (account != null) {
+      await db.setManualBalance(account.id, secondaryBalance);
+    }
+  }
 
   // Auto-save transaction fee silently before showing card
   if (txCost > 0) {

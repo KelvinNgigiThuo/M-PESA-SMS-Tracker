@@ -27,6 +27,8 @@ class OverlayService : Service() {
         const val EXTRA_TX_COST = "txCost"
         const val EXTRA_MSG_TYPE = "msgType"
         const val EXTRA_ACCOUNT_REF = "accountRef"
+        const val EXTRA_SECONDARY_BALANCE = "secondaryBalance"
+        const val EXTRA_SECONDARY_ACCOUNT = "secondaryAccount"
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -36,10 +38,12 @@ class OverlayService : Service() {
         val txCode = intent?.getStringExtra(EXTRA_TX_CODE) ?: ""
         val balance = intent?.getDoubleExtra(EXTRA_BALANCE, 0.0) ?: 0.0
         val txCost = intent?.getDoubleExtra(EXTRA_TX_COST, 0.0) ?: 0.0
+        val secondaryBalance = intent?.getDoubleExtra(EXTRA_SECONDARY_BALANCE, 0.0) ?: 0.0
+        val secondaryAccount = intent?.getStringExtra(EXTRA_SECONDARY_ACCOUNT) ?: ""
 
         Log.d("OverlayService", "Showing bubble: $direction Ksh$amount")
 
-        showBubble(amount, recipient, direction, txCode, balance, txCost)
+        showBubble(amount, recipient, direction, txCode, balance, txCost, secondaryBalance, secondaryAccount)
 
         return START_NOT_STICKY
     }
@@ -50,7 +54,9 @@ class OverlayService : Service() {
         direction: String,
         txCode: String,
         balance: Double,
-        txCost: Double
+        txCost: Double,
+        secondaryBalance: Double,
+        secondaryAccount: String
     ) {
         removeBubble()
 
@@ -123,6 +129,8 @@ class OverlayService : Service() {
                             putExtra("txCode", txCode)
                             putExtra("balance", balance)
                             putExtra("txCost", txCost)
+                            putExtra("secondaryBalance", secondaryBalance)
+                            putExtra("secondaryAccount", secondaryAccount)
                             putExtra("fromBubble", true)
                         }
                         this@OverlayService.startActivity(intent)

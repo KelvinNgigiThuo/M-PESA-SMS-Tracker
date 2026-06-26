@@ -51,16 +51,18 @@ class SmsReceiver : BroadcastReceiver() {
     }
 
     private fun triggerBubble(context: Context, parsed: MpesaMessage) {
-    val intent = Intent(context, OverlayService::class.java).apply {
-        putExtra(OverlayService.EXTRA_AMOUNT, parsed.amount)
-        putExtra(OverlayService.EXTRA_RECIPIENT, parsed.recipient)
-        putExtra(OverlayService.EXTRA_DIRECTION, parsed.direction)
-        putExtra(OverlayService.EXTRA_TX_CODE, parsed.transactionCode)
-        putExtra(OverlayService.EXTRA_BALANCE, parsed.balanceAfter)
-        putExtra(OverlayService.EXTRA_TX_COST, parsed.transactionCost)
-        putExtra(OverlayService.EXTRA_MSG_TYPE, parsed.messageType)
-        putExtra(OverlayService.EXTRA_ACCOUNT_REF, parsed.accountReference)
+        val intent = Intent(context, OverlayService::class.java).apply {
+            putExtra(OverlayService.EXTRA_AMOUNT, parsed.amount)
+            putExtra(OverlayService.EXTRA_RECIPIENT, parsed.recipient)
+            putExtra(OverlayService.EXTRA_DIRECTION, parsed.direction)
+            putExtra(OverlayService.EXTRA_TX_CODE, parsed.transactionCode)
+            putExtra(OverlayService.EXTRA_BALANCE, parsed.balanceAfter)
+            putExtra(OverlayService.EXTRA_TX_COST, parsed.transactionCost)
+            putExtra(OverlayService.EXTRA_MSG_TYPE, parsed.messageType)
+            putExtra(OverlayService.EXTRA_ACCOUNT_REF, parsed.accountReference)
+            putExtra(OverlayService.EXTRA_SECONDARY_BALANCE, parsed.secondaryBalance)
+            putExtra(OverlayService.EXTRA_SECONDARY_ACCOUNT, parsed.secondaryAccount)
+        }
+        context.startService(intent)
     }
-    context.startService(intent)
-}
 }

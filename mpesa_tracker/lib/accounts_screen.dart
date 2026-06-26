@@ -51,14 +51,16 @@ class _AccountsScreenState extends State<AccountsScreen> {
 
   // Compute live balance for an account
   double _balanceFor(Account a) {
-  if (a.name == 'M-Pesa') {
-    // Use live SMS balance if available, fall back to opening balance
-    return _mpesaLiveBalance > 0 ? _mpesaLiveBalance : a.openingBalance;
+    if (a.name == 'M-Pesa') {
+      return _mpesaLiveBalance > 0 ? _mpesaLiveBalance : a.openingBalance;
+    }
+    if (a.manualBalance != null) {
+      return a.manualBalance!;
+    }
+    // No manual balance — compute from opening balance + tagged movements
+    final movements = _bucketBalances[a.name] ?? 0.0;
+    return a.openingBalance + movements;
   }
-  final movements = _bucketBalances[a.name] ?? 0.0;
-  final base = a.manualBalance ?? a.openingBalance;
-  return base + movements;
-}
 
   String _groupLabel(String group) {
     switch (group) {

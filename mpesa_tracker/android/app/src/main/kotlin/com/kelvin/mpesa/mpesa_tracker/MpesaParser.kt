@@ -9,7 +9,9 @@ data class MpesaMessage(
     val balanceAfter: Double,
     val timestamp: String,
     val direction: String,
-    val messageType: String
+    val messageType: String,
+    val secondaryBalance: Double = 0.0,
+    val secondaryAccount: String = ""
 )
 
 object MpesaParser {
@@ -191,11 +193,39 @@ object MpesaParser {
             }
         }
 
+        // Extract secondary account balance if present
+        var secondaryBalance = 0.0
+        var secondaryAccount = ""
+
+        val mshwariBalance = Regex(
+            "(?:New )?M-Shwari (?:saving account )?balance is [Kk][Ss][Hh]([\\d,]+\\.\\d{2})",
+            RegexOption.IGNORE_CASE
+        ).find(clean)?.groupValues?.get(1)
+            ?.replace(",", "")?.toDoubleOrNull()
+
+        val kcbMpesaBalance = Regex(
+            "new KCB M-PESA (?:Saving account )?balance is [Kk][Ss][Hh]([\\d,]+\\.\\d{2})",
+            RegexOption.IGNORE_CASE
+        ).find(clean)?.groupValues?.get(1)
+            ?.replace(",", "")?.toDoubleOrNull()
+
+        when {
+            mshwariBalance != null -> {
+                secondaryBalance = mshwariBalance
+                secondaryAccount = "M-Shwari"
+            }
+            kcbMpesaBalance != null -> {
+                secondaryBalance = kcbMpesaBalance
+                secondaryAccount = "KCB M-Pesa"
+            }
+        }
+
         return MpesaMessage(
             txCode, amount, cost,
             recipient, accountRef,
             balance, timestamp,
-            direction, messageType
+            direction, messageType,
+            secondaryBalance, secondaryAccount
         )
     }
 }

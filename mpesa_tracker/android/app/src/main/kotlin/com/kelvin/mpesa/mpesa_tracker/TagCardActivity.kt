@@ -40,12 +40,14 @@ class TagCardActivity : FlutterActivity() {
 
     private fun extractData(): Map<String, Any> {
         return mapOf(
-            "amount"    to (intent.getDoubleExtra("amount", 0.0)),
-            "recipient" to (intent.getStringExtra("recipient") ?: ""),
-            "direction" to (intent.getStringExtra("direction") ?: "out"),
-            "txCode"    to (intent.getStringExtra("txCode") ?: ""),
-            "balance"   to (intent.getDoubleExtra("balance", 0.0)),
-            "txCost"    to (intent.getDoubleExtra("txCost", 0.0))
+            "amount"           to (intent.getDoubleExtra("amount", 0.0)),
+            "recipient"        to (intent.getStringExtra("recipient") ?: ""),
+            "direction"        to (intent.getStringExtra("direction") ?: "out"),
+            "txCode"           to (intent.getStringExtra("txCode") ?: ""),
+            "balance"          to (intent.getDoubleExtra("balance", 0.0)),
+            "txCost"           to (intent.getDoubleExtra("txCost", 0.0)),
+            "secondaryBalance" to (intent.getDoubleExtra("secondaryBalance", 0.0)),
+            "secondaryAccount" to (intent.getStringExtra("secondaryAccount") ?: "")
         )
     }
 
