@@ -584,10 +584,30 @@ class _TagCardState extends State<_TagCard> {
   }
 
   // ── Save methods ──────────────────────────────────────────────────
+ // ── Upsert — updates existing untagged record or inserts new ─────
+  Future<void> _upsert(TransactionsCompanion companion) async {
+    final existing = await (db.select(db.transactions)
+      ..where((t) =>
+          t.txCode.equals(widget.txCode) &
+          t.isTagged.equals(false)))
+    .getSingleOrNull();
 
-  // Transfer — works for both in and out via widget.direction
+    if (existing != null) {
+      await db.updateTaggedTransaction(
+        existing.id,
+        type: companion.type.value ?? '',
+        category: companion.category.value,
+        bucketName: companion.bucketName.value,
+        poolLabel: companion.poolLabel.value,
+        receivableLabel: companion.receivableLabel.value,
+      );
+    } else {
+      await db.insertTransaction(companion);
+    }
+  }
+
   Future<void> _saveTransfer(String bucketName) async {
-    await db.insertTransaction(TransactionsCompanion(
+    await _upsert(TransactionsCompanion(
       txCode: drift.Value(widget.txCode),
       amount: drift.Value(widget.amount),
       recipient: drift.Value(widget.recipient),
@@ -607,7 +627,7 @@ class _TagCardState extends State<_TagCard> {
     final label = _noteController.text.trim().isEmpty
         ? 'Custody – ${DateTime.now().day}/${DateTime.now().month}'
         : _noteController.text.trim();
-    await db.insertTransaction(TransactionsCompanion(
+    await _upsert(TransactionsCompanion(
       txCode: drift.Value(widget.txCode),
       amount: drift.Value(widget.amount),
       recipient: drift.Value(widget.recipient),
@@ -626,7 +646,7 @@ class _TagCardState extends State<_TagCard> {
     final label = _noteController.text.trim().isEmpty
         ? 'Reimbursement – ${DateTime.now().day}/${DateTime.now().month}'
         : _noteController.text.trim();
-    await db.insertTransaction(TransactionsCompanion(
+    await _upsert(TransactionsCompanion(
       txCode: drift.Value(widget.txCode),
       amount: drift.Value(widget.amount),
       recipient: drift.Value(widget.recipient),
@@ -642,7 +662,7 @@ class _TagCardState extends State<_TagCard> {
   }
 
   Future<void> _saveExpense() async {
-    await db.insertTransaction(TransactionsCompanion(
+    await _upsert(TransactionsCompanion(
       txCode: drift.Value(widget.txCode),
       amount: drift.Value(widget.amount),
       recipient: drift.Value(widget.recipient),
@@ -661,7 +681,7 @@ class _TagCardState extends State<_TagCard> {
     final label = _noteController.text.trim().isEmpty
         ? 'Custody – ${DateTime.now().day}/${DateTime.now().month}'
         : _noteController.text.trim();
-    await db.insertTransaction(TransactionsCompanion(
+    await _upsert(TransactionsCompanion(
       txCode: drift.Value(widget.txCode),
       amount: drift.Value(widget.amount),
       recipient: drift.Value(widget.recipient),
@@ -680,8 +700,7 @@ class _TagCardState extends State<_TagCard> {
     final owed = receivable.amount;
     final incoming = widget.amount;
 
-    // Always save the receivable_clear record
-    await db.insertTransaction(TransactionsCompanion(
+    await _upsert(TransactionsCompanion(
       txCode: drift.Value(widget.txCode),
       amount: drift.Value(incoming >= owed ? owed : incoming),
       recipient: drift.Value(widget.recipient),
@@ -694,7 +713,6 @@ class _TagCardState extends State<_TagCard> {
       isTagged: drift.Value(true),
     ));
 
-    // If paid more than owed — the excess is real income
     if (incoming > owed) {
       final excess = incoming - owed;
       await db.insertTransaction(TransactionsCompanion(
@@ -716,7 +734,7 @@ class _TagCardState extends State<_TagCard> {
   }
 
   Future<void> _saveIncome() async {
-    await db.insertTransaction(TransactionsCompanion(
+    await _upsert(TransactionsCompanion(
       txCode: drift.Value(widget.txCode),
       amount: drift.Value(widget.amount),
       recipient: drift.Value(widget.recipient),
@@ -731,7 +749,7 @@ class _TagCardState extends State<_TagCard> {
   }
 
   Future<void> _saveUntagged() async {
-    await db.insertTransaction(TransactionsCompanion(
+    await _upsert(TransactionsCompanion(
       txCode: drift.Value(widget.txCode),
       amount: drift.Value(widget.amount),
       recipient: drift.Value(widget.recipient),

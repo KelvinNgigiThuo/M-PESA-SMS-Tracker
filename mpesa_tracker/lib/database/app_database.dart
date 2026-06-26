@@ -65,7 +65,7 @@ class AppDatabase extends _$AppDatabase {
   Future<void> _seedAccounts() async {
     final defaults = [
       ('M-Pesa',          'mpesa'),
-      ('My other M-Pesa', 'mpesa'),
+      ('Other M-Pesa', 'mpesa'),
       ('NCBA',            'bank'),
       ('KCB Bank',        'bank'),
       ('M-Shwari',        'mobile_savings'),
@@ -164,6 +164,24 @@ class AppDatabase extends _$AppDatabase {
         openingBalance: const Value(0.0),
         isActive: const Value(true),
         createdAt: Value(DateTime.now()),
+      ));
+
+  Future<void> updateTaggedTransaction(
+    int id, {
+    required String type,
+    String? category,
+    String? bucketName,
+    String? poolLabel,
+    String? receivableLabel,
+  }) =>
+      (update(transactions)..where((t) => t.id.equals(id)))
+      .write(TransactionsCompanion(
+        type: Value(type),
+        isTagged: const Value(true),
+        category: Value(category),
+        bucketName: Value(bucketName),
+        poolLabel: Value(poolLabel),
+        receivableLabel: Value(receivableLabel),
       ));
 }
 

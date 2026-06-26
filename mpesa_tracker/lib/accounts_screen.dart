@@ -13,6 +13,7 @@ class AccountsScreen extends StatefulWidget {
 class _AccountsScreenState extends State<AccountsScreen> {
   List<Account> _accounts = [];
   Map<String, double> _bucketBalances = {};
+  double _mpesaLiveBalance = 0;
   bool _loading = true;
 
   @override
@@ -22,26 +23,42 @@ class _AccountsScreenState extends State<AccountsScreen> {
   }
 
   Future<void> _load() async {
-    final accounts = await db.getAllAccounts();
-    final bucketBalances = await db.getBucketBalances();
-    setState(() {
-      _accounts = accounts;
-      _bucketBalances = bucketBalances;
-      _loading = false;
-    });
+  final accounts = await db.getAllAccounts();
+  final bucketBalances = await db.getBucketBalances();
+  final all = await db.watchAll().first;
+
+  // Get latest M-Pesa balance from SMS
+  double mpesaBalance = 0;
+  DateTime? lastBalanceTime;
+  for (final t in all) {
+    if (t.balanceAfter > 0) {
+      if (lastBalanceTime == null ||
+          t.createdAt.isAfter(lastBalanceTime)) {
+        mpesaBalance = t.balanceAfter;
+        lastBalanceTime = t.createdAt;
+      }
+    }
   }
+
+
+  setState(() {
+    _accounts = accounts;
+    _bucketBalances = bucketBalances;
+    _mpesaLiveBalance = mpesaBalance;
+    _loading = false;
+  });
+}
 
   // Compute live balance for an account
   double _balanceFor(Account a) {
-    if (a.name == 'M-Pesa') {
-      // M-Pesa balance comes from dashboard — show opening balance here
-      // as a fallback since live balance is tracked via SMS
-      return a.openingBalance;
-    }
-    final movements = _bucketBalances[a.name] ?? 0.0;
-    final base = a.manualBalance ?? a.openingBalance;
-    return base + movements;
+  if (a.name == 'M-Pesa') {
+    // Use live SMS balance if available, fall back to opening balance
+    return _mpesaLiveBalance > 0 ? _mpesaLiveBalance : a.openingBalance;
   }
+  final movements = _bucketBalances[a.name] ?? 0.0;
+  final base = a.manualBalance ?? a.openingBalance;
+  return base + movements;
+}
 
   String _groupLabel(String group) {
     switch (group) {
@@ -211,115 +228,113 @@ class _AccountsScreenState extends State<AccountsScreen> {
 
   // ── Manual balance correction sheet ───────────────────────────────
   void _showCorrectBalance(Account account) {
-    final controller = TextEditingController(
-      text: account.manualBalance != null
-          ? account.manualBalance!.toStringAsFixed(2)
-          : _balanceFor(account).toStringAsFixed(2),
-    );
+  final controller = TextEditingController(
+    text: account.manualBalance != null
+        ? account.manualBalance!.toStringAsFixed(2)
+        : _balanceFor(account).toStringAsFixed(2),
+  );
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => Padding(
-        padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom),
-        child: Container(
-          margin: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (ctx) => Padding(
+      padding: EdgeInsets.only(
+          bottom: MediaQuery.of(ctx).viewInsets.bottom),
+      child: Container(
+        margin: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Theme.of(ctx).colorScheme.surface,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              const SizedBox(height: 16),
-              Text(
-                account.name,
-                style: const TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Set the actual current balance. The app will track movements from this point.',
-                style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  const Text('Ksh',
-                      style: TextStyle(fontSize: 14, color: Colors.grey)),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: controller,
-                      autofocus: true,
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(
-                            RegExp(r'[\d,.]')),
-                      ],
-                      decoration: const InputDecoration(
-                        hintText: '0.00',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      style: const TextStyle(
-                          fontSize: 20, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              account.name,
+              style: const TextStyle(
+                  fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Set the actual current balance. The app will track movements from this point.',
+              style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                const Text('Ksh',
+                    style: TextStyle(fontSize: 14, color: Colors.grey)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: controller,
+                    autofocus: true,
+                    keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(
+                          RegExp(r'[\d,.]')),
+                    ],
+                    decoration: const InputDecoration(
+                      hintText: '0.00',
+                      border: OutlineInputBorder(),
+                      isDense: true,
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              GestureDetector(
-                onTap: () async {
-                  final value = double.tryParse(
-                          controller.text
-                              .trim()
-                              .replaceAll(',', '')) ??
-                      0.0;
-                  await db.setManualBalance(account.id, value);
-                  if (mounted) {
-                    Navigator.pop(context);
-                    _load();
-                  }
-                },
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1A73E8),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Text(
-                    'Save correction',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                        fontSize: 20, fontWeight: FontWeight.w600),
                   ),
                 ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            GestureDetector(
+              onTap: () async {
+                final value = double.tryParse(
+                        controller.text.trim().replaceAll(',', '')) ??
+                    0.0;
+                await db.setManualBalance(account.id, value);
+                if (mounted) {
+                  Navigator.pop(ctx);
+                  _load();
+                }
+              },
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A73E8),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Text(
+                  'Save correction',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600),
+                ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   // ── Add new account sheet ─────────────────────────────────────────
   void _showAddAccount() {
