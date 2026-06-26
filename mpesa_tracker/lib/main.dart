@@ -4,6 +4,7 @@ import 'database/app_database.dart';
 import 'overlay_channel.dart';
 import 'dashboard_screen.dart';
 import 'setup_screen.dart';
+import 'main_shell.dart';
 
 final AppDatabase db = AppDatabase();
 
@@ -28,7 +29,7 @@ class MpesaTrackerApp extends StatelessWidget {
       ),
       home: const AppEntry(),
       routes: {
-        '/dashboard': (_) => const DashboardScreen(),
+        '/dashboard': (_) => const MainShell(),
         '/setup': (_) => const SetupScreen(),
       },
     );
