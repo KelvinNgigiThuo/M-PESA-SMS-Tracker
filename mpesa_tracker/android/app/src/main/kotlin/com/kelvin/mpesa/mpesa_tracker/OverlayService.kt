@@ -25,6 +25,8 @@ class OverlayService : Service() {
         const val EXTRA_TX_CODE = "tx_code"
         const val EXTRA_BALANCE = "balance"
         const val EXTRA_TX_COST = "txCost"
+        const val EXTRA_MSG_TYPE = "msgType"
+        const val EXTRA_ACCOUNT_REF = "accountRef"
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
