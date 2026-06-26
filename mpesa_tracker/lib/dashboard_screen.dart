@@ -12,15 +12,23 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-    static const _channel = MethodChannel('com.kelvin.mpesa/overlay');
-  List<Transaction> _transactions = [];
-  bool _loading = true;
+  static const _channel = MethodChannel('com.kelvin.mpesa/overlay');
+
+  // Transactions
+  List<Transaction> _recent = [];
+  List<Transaction> _openReceivables = [];
 
   // Net worth components
-  double _lastMpesaBalance = 0;
+  double _mpesaBalance = 0;
   double _custodyHeld = 0;
-  double _openReceivables = 0;
+  double _openReceivablesTotal = 0;
+  double _bucketTotal = 0;
   Map<String, double> _bucketBalances = {};
+
+  // Custody pools — derived from transactions
+  List<Map<String, dynamic>> _custodyPools = [];
+
+  bool _loading = true;
 
   @override
   void initState() {
@@ -33,9 +41,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _signalReady() async {
     try {
       await _channel.invokeMethod('flutterReady');
-    } catch (e) {
-      // TagCardActivity will retry
-    }
+    } catch (e) {}
   }
 
   Future<dynamic> _handleNativeCall(MethodCall call) async {
@@ -46,63 +52,106 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _load();
         try {
           await _channel.invokeMethod('closeTagCard');
-        } catch (e) {
-          // Only TagCardActivity needs to close
-        }
+        } catch (e) {}
       }
     }
   }
 
   Future<void> _load() async {
     final all = await db.watchAll().first;
+    final bucketBalances = await db.getBucketBalances();
+    final accounts = await db.getAllAccounts();
 
+    double mpesaBalance = 0;
+    DateTime? lastBalanceTime;
     double custody = 0;
     double receivables = 0;
-    double lastBalance = 0;
-    DateTime? lastBalanceTime;
+
+    // Custody pools — track per label
+    final Map<String, double> poolMap = {};
 
     for (final t in all) {
-        // Only update balance if this transaction is more recent
-        if (t.balanceAfter > 0) {
-        if (lastBalanceTime == null || t.createdAt.isAfter(lastBalanceTime)) {
-            lastBalance = t.balanceAfter;
-            lastBalanceTime = t.createdAt;
+      // Latest M-Pesa balance from SMS
+      if (t.balanceAfter > 0) {
+        if (lastBalanceTime == null ||
+            t.createdAt.isAfter(lastBalanceTime)) {
+          mpesaBalance = t.balanceAfter;
+          lastBalanceTime = t.createdAt;
         }
-        }
+      }
 
-        // Custody held
-        if (t.type == 'custody_receive') custody += t.amount;
-        if (t.type == 'custody_spend') custody -= t.amount;
+      // Custody totals
+      if (t.type == 'custody_receive') {
+        custody += t.amount;
+        final label = t.poolLabel ?? 'Unnamed';
+        poolMap[label] = (poolMap[label] ?? 0) + t.amount;
+      }
+      if (t.type == 'custody_spend') {
+        custody -= t.amount;
+        final label = t.poolLabel ?? 'Unnamed';
+        poolMap[label] = (poolMap[label] ?? 0) - t.amount;
+      }
 
-        // Open receivables
-        if (t.type == 'receivable_create') receivables += t.amount;
-        if (t.type == 'receivable_clear') receivables -= t.amount;
+      // Receivables totals
+      if (t.type == 'receivable_create') receivables += t.amount;
+      if (t.type == 'receivable_clear') receivables -= t.amount;
     }
 
-    final bucketBalances = await db.getBucketBalances();
+    // Opening balances from accounts table (excluding M-Pesa)
+    double openingTotal = 0;
+    for (final a in accounts) {
+      if (a.name != 'M-Pesa') {
+        final manual = a.manualBalance;
+        if (manual != null) {
+          // Manual correction overrides opening balance
+          // Add tagged movements since the correction date
+          final movements = bucketBalances[a.name] ?? 0.0;
+          openingTotal += manual + movements;
+        } else {
+          openingTotal += a.openingBalance + (bucketBalances[a.name] ?? 0.0);
+        }
+      }
+    }
+
+    // Filter open pools only
+    final openPools = poolMap.entries
+        .where((e) => e.value > 0)
+        .map((e) => {'label': e.key, 'balance': e.value})
+        .toList();
+
+    // Open receivables list
+    final openReceivables = all
+        .where((t) => t.type == 'receivable_create')
+        .toList();
+
+    // Recent 5 tagged transactions
+    final recent = all
+        .where((t) => t.isTagged)
+        .take(5)
+        .toList();
 
     setState(() {
-      _transactions = all;
-      _lastMpesaBalance = lastBalance;
+      _mpesaBalance = mpesaBalance;
       _custodyHeld = custody.clamp(0, double.infinity);
-      _openReceivables = receivables.clamp(0, double.infinity);
+      _openReceivablesTotal = receivables.clamp(0, double.infinity);
+      _bucketTotal = openingTotal;
       _bucketBalances = bucketBalances;
+      _custodyPools = openPools;
+      _openReceivables = openReceivables;
+      _recent = recent;
       _loading = false;
     });
-    }
-
-  double get _totalBucketBalance =>
-      _bucketBalances.values.fold(0.0, (sum, v) => sum + v);
+  }
 
   double get _trueNetWorth =>
-      _lastMpesaBalance + _totalBucketBalance - _custodyHeld + _openReceivables;
+      _mpesaBalance + _bucketTotal - _custodyHeld + _openReceivablesTotal;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
       appBar: AppBar(
-        title: const Text('M-Pesa Tracker'),
+        title: const Text('Dashboard'),
         backgroundColor: const Color(0xFF1A73E8),
         foregroundColor: Colors.white,
         elevation: 0,
@@ -121,10 +170,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 padding: const EdgeInsets.all(16),
                 children: [
                   _buildNetWorthCard(),
-                  const SizedBox(height: 16),
-                  _buildBreakdownRow(),
+                  const SizedBox(height: 12),
+                  _buildStatRow(),
                   const SizedBox(height: 20),
-                  _buildTransactionList(),
+                  if (_openReceivables.isNotEmpty) ...[
+                    _buildSectionHeader(
+                        'Owed to me', _openReceivablesTotal),
+                    const SizedBox(height: 8),
+                    ..._openReceivables.map(_buildReceivableRow),
+                    const SizedBox(height: 20),
+                  ],
+                  if (_custodyPools.isNotEmpty) ...[
+                    _buildSectionHeader(
+                        "I'm holding", _custodyHeld),
+                    const SizedBox(height: 8),
+                    ..._custodyPools.map(_buildCustodyRow),
+                    const SizedBox(height: 20),
+                  ],
+                  if (_recent.isNotEmpty) ...[
+                    _buildSectionHeader('Recent', null),
+                    const SizedBox(height: 8),
+                    ..._recent.map(_buildTxRow),
+                  ],
                 ],
               ),
             ),
@@ -150,12 +217,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             'Ksh ${_trueNetWorth.toStringAsFixed(2)}',
             style: const TextStyle(
                 color: Colors.white,
-                fontSize: 28,
+                fontSize: 30,
                 fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 4),
           Text(
-            'M-Pesa balance − custody held + receivables owed',
+            'M-Pesa + accounts − custody held + owed to me',
             style: TextStyle(
                 color: Colors.white.withOpacity(0.6), fontSize: 11),
           ),
@@ -164,41 +231,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ── Breakdown row ──────────────────────────────────────────────────
-  Widget _buildBreakdownRow() {
+  // ── Stat row ───────────────────────────────────────────────────────
+  Widget _buildStatRow() {
     return Row(
       children: [
-        Expanded(
-          child: _buildStatTile(
-            label: 'M-Pesa balance',
-            value: 'Ksh ${_lastMpesaBalance.toStringAsFixed(2)}',
-            color: Colors.blue,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _buildStatTile(
-            label: 'Custody held',
-            value: '− Ksh ${_custodyHeld.toStringAsFixed(2)}',
-            color: Colors.orange,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _buildStatTile(
-            label: 'Owed to me',
-            value: '+ Ksh ${_openReceivables.toStringAsFixed(2)}',
-            color: Colors.green,
-          ),
-        ),
+        Expanded(child: _statTile(
+          'M-Pesa',
+          'Ksh ${_mpesaBalance.toStringAsFixed(2)}',
+          Colors.blue,
+          Icons.phone_android,
+        )),
+        const SizedBox(width: 8),
+        Expanded(child: _statTile(
+          'Holding',
+          '− Ksh ${_custodyHeld.toStringAsFixed(2)}',
+          Colors.orange,
+          Icons.wallet,
+        )),
+        const SizedBox(width: 8),
+        Expanded(child: _statTile(
+          'Owed to me',
+          '+ Ksh ${_openReceivablesTotal.toStringAsFixed(2)}',
+          Colors.green,
+          Icons.arrow_downward,
+        )),
       ],
     );
   }
 
-  Widget _buildStatTile(
-      {required String label,
-      required String value,
-      required Color color}) {
+  Widget _statTile(
+      String label, String value, Color color, IconData icon) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
       decoration: BoxDecoration(
@@ -209,12 +271,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(height: 6),
           Text(label,
               style: TextStyle(fontSize: 10, color: Colors.grey[500])),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Text(value,
               style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 11,
                   fontWeight: FontWeight.w600,
                   color: color)),
         ],
@@ -222,110 +286,149 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ── Transaction list ───────────────────────────────────────────────
-  Widget _buildTransactionList() {
-    if (_transactions.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.only(top: 40),
-          child: Text('No transactions yet',
-              style: TextStyle(color: Colors.grey)),
-        ),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  // ── Section header ─────────────────────────────────────────────────
+  Widget _buildSectionHeader(String title, double? total) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text('Transactions (${_transactions.length})',
+        Text(title,
             style: const TextStyle(
-                fontSize: 13,
+                fontSize: 14,
                 fontWeight: FontWeight.w600,
                 color: Colors.black87)),
-        const SizedBox(height: 10),
-        ...(_transactions.map((t) => _buildTxRow(t)).toList()),
+        if (total != null)
+          Text('Ksh ${total.toStringAsFixed(2)}',
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[600])),
       ],
     );
   }
 
+  // ── Receivable row ─────────────────────────────────────────────────
+  Widget _buildReceivableRow(Transaction t) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.green[100]!),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.receipt_long, color: Colors.green[400], size: 18),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              t.receivableLabel ?? t.recipient,
+              style: const TextStyle(
+                  fontSize: 13, fontWeight: FontWeight.w500),
+            ),
+          ),
+          Text(
+            'Ksh ${t.amount.toInt()}',
+            style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.green),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Custody pool row ───────────────────────────────────────────────
+  Widget _buildCustodyRow(Map<String, dynamic> pool) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange[100]!),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.wallet, color: Colors.orange[400], size: 18),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              pool['label'] as String,
+              style: const TextStyle(
+                  fontSize: 13, fontWeight: FontWeight.w500),
+            ),
+          ),
+          Text(
+            'Ksh ${(pool['balance'] as double).toInt()}',
+            style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.orange),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Recent transaction row ─────────────────────────────────────────
   Widget _buildTxRow(Transaction t) {
     final isIn = t.direction == 'in';
-    final amountColor = isIn ? Colors.green : Colors.red;
-    final amountPrefix = isIn ? '+' : '−';
-    final typeLabel = _typeLabel(t.type ?? 'untagged');
-    final subLabel = t.category ??
+    final color = isIn ? Colors.green : Colors.red;
+    final prefix = isIn ? '+' : '−';
+    final label = _typeLabel(t.type ?? 'untagged');
+    final sub = t.category ??
         t.bucketName ??
         t.poolLabel ??
         t.receivableLabel ??
         t.recipient;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-            color: t.isTagged ? Colors.grey[200]! : Colors.orange[200]!),
+        border: Border.all(color: Colors.grey[200]!),
       ),
       child: Row(
         children: [
-          // Direction indicator
           Container(
-            width: 36,
-            height: 36,
+            width: 34,
+            height: 34,
             decoration: BoxDecoration(
-              color: amountColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(10),
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
               isIn ? Icons.arrow_downward : Icons.arrow_upward,
-              color: amountColor,
+              color: color,
               size: 16,
             ),
           ),
           const SizedBox(width: 12),
-          // Labels
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(typeLabel,
+                Text(label,
                     style: const TextStyle(
                         fontSize: 13, fontWeight: FontWeight.w500)),
-                if (subLabel.isNotEmpty)
-                  Text(subLabel,
+                if (sub.isNotEmpty)
+                  Text(sub,
                       style: TextStyle(
                           fontSize: 11, color: Colors.grey[500]),
                       overflow: TextOverflow.ellipsis),
               ],
             ),
           ),
-          // Amount + untagged badge
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '$amountPrefix Ksh ${t.amount.toInt()}',
-                style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: amountColor),
-              ),
-              if (!t.isTagged)
-                Container(
-                  margin: const EdgeInsets.only(top: 3),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.orange[100],
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: const Text('untagged',
-                      style: TextStyle(
-                          fontSize: 9, color: Colors.orange)),
-                ),
-            ],
+          Text(
+            '$prefix Ksh ${t.amount.toInt()}',
+            style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: color),
           ),
         ],
       ),
@@ -334,16 +437,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   String _typeLabel(String type) {
     switch (type) {
-      case 'transfer':        return 'Transfer out';
-      case 'transfer_in':     return 'Transfer in';
-      case 'custody_spend':   return 'Custody spend';
-      case 'custody_receive': return 'Custody received';
+      case 'transfer':          return 'Transfer out';
+      case 'transfer_in':       return 'Transfer in';
+      case 'mshwari_out':       return 'To M-Shwari';
+      case 'mshwari_in':        return 'From M-Shwari';
+      case 'kcbmpesa_out':      return 'To KCB M-Pesa';
+      case 'kcbmpesa_in':       return 'From KCB M-Pesa';
+      case 'custody_spend':     return 'Custody spend';
+      case 'custody_receive':   return 'Custody received';
       case 'receivable_create': return 'Fronted — pay me back';
       case 'receivable_clear':  return 'Receivable cleared';
-      case 'expense':         return 'Expense';
-      case 'income':          return 'Income';
-      case 'fee':             return 'Transaction fee';
-      default:                return 'Untagged';
+      case 'expense':           return 'Expense';
+      case 'income':            return 'Income';
+      case 'fee':               return 'Transaction fee';
+      default:                  return 'Untagged';
     }
   }
 }
