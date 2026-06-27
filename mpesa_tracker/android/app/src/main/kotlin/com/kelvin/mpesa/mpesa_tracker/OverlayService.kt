@@ -43,7 +43,11 @@ class OverlayService : Service() {
 
         Log.d("OverlayService", "Showing bubble: $direction Ksh$amount")
 
-        showBubble(amount, recipient, direction, txCode, balance, txCost, secondaryBalance, secondaryAccount)
+        showBubble(
+            amount, recipient, direction,
+            txCode, balance, txCost,
+            secondaryBalance, secondaryAccount
+        )
 
         return START_NOT_STICKY
     }
@@ -85,33 +89,37 @@ class OverlayService : Service() {
 
         bubbleView?.findViewById<TextView>(R.id.bubble_amount)?.text = amountText
 
-        // Set arrow direction
+        // Arrow direction — gold for both, direction tells which
         val arrowText = if (direction == "in") "↓" else "↑"
         bubbleView?.findViewById<TextView>(R.id.bubble_arrow)?.text = arrowText
 
-        // Set bubble color using the drawable so the circle shape is preserved
+        // Apply the drawable — always forest green, gold border
         val drawable = resources.getDrawable(R.drawable.bubble_background, null)
                 as GradientDrawable
-        val bgColor = if (direction == "in") 0xFF1A73E8.toInt() else 0xFFE53935.toInt()
-        drawable.setColor(bgColor)
-        bubbleView?.findViewById<LinearLayout>(R.id.bubble_collapsed)?.background = drawable
+        bubbleView?.findViewById<LinearLayout>(R.id.bubble_collapsed)
+            ?.background = drawable
 
-        // Drag support
-        var initialX = 0; var initialY = 0
-        var initialTouchX = 0f; var initialTouchY = 0f
+        // Drag support — fixed Y axis to match BOTTOM gravity
+        var initialX = 0
+        var initialY = 0
+        var initialTouchX = 0f
+        var initialTouchY = 0f
         var isDragging = false
 
         bubbleView?.setOnTouchListener { _, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    initialX = params.x; initialY = params.y
-                    initialTouchX = event.rawX; initialTouchY = event.rawY
+                    initialX = params.x
+                    initialY = params.y
+                    initialTouchX = event.rawX
+                    initialTouchY = event.rawY
                     isDragging = false
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
                     val dx = (initialTouchX - event.rawX).toInt()
-                    val dy = (event.rawY - initialTouchY).toInt()
+                    // Y is inverted with BOTTOM gravity — finger down = params.y decreases
+                    val dy = (initialTouchY - event.rawY).toInt()
                     if (Math.abs(dx) > 5 || Math.abs(dy) > 5) isDragging = true
                     params.x = initialX + dx
                     params.y = initialY + dy
@@ -121,8 +129,12 @@ class OverlayService : Service() {
                 MotionEvent.ACTION_UP -> {
                     if (!isDragging) {
                         Log.d("OverlayService", "Bubble tapped — opening tag card overlay")
-                        val intent = Intent(this@OverlayService, TagCardActivity::class.java).apply {
-                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        val intent = Intent(
+                            this@OverlayService,
+                            TagCardActivity::class.java
+                        ).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                                    Intent.FLAG_ACTIVITY_SINGLE_TOP
                             putExtra("amount", amount)
                             putExtra("recipient", recipient)
                             putExtra("direction", direction)

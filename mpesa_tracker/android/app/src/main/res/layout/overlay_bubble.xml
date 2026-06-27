@@ -9,7 +9,7 @@
         android:layout_height="64dp"
         android:orientation="vertical"
         android:gravity="center"
-        android:elevation="8dp"
+        android:elevation="12dp"
         android:layout_gravity="bottom|end"
         android:background="@drawable/bubble_background">
 
@@ -17,8 +17,8 @@
             android:id="@+id/bubble_arrow"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="#FFFFFF"
-            android:textSize="12sp"
+            android:textColor="#C9A84C"
+            android:textSize="13sp"
             android:textStyle="bold"
             android:text="↑"/>
 
@@ -27,7 +27,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textColor="#FFFFFF"
-            android:textSize="11sp"
+            android:textSize="12sp"
             android:textStyle="bold"
             android:text="0"/>
 
