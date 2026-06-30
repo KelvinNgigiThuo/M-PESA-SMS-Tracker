@@ -4,6 +4,12 @@ import 'database/app_database.dart';
 import 'overlay_channel.dart';
 import 'main.dart';
 
+const _green = Color(0xFF1A3C34);
+const _gold = Color(0xFFC9A84C);
+const _incomeColor = Color(0xFF5ec47a);
+const _expenseColor = Color(0xFFe05252);
+const _holdingColor = Color(0xFFf5a623);
+
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
@@ -14,19 +20,14 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   static const _channel = MethodChannel('com.kelvin.mpesa/overlay');
 
-  // Transactions
   List<Transaction> _recent = [];
   List<Transaction> _openReceivables = [];
+  List<Map<String, dynamic>> _custodyPools = [];
 
-  // Net worth components
   double _mpesaBalance = 0;
   double _custodyHeld = 0;
   double _openReceivablesTotal = 0;
   double _bucketTotal = 0;
-  Map<String, double> _bucketBalances = {};
-
-  // Custody pools — derived from transactions
-  List<Map<String, dynamic>> _custodyPools = [];
 
   bool _loading = true;
 
@@ -66,12 +67,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     DateTime? lastBalanceTime;
     double custody = 0;
     double receivables = 0;
-
-    // Custody pools — track per label
     final Map<String, double> poolMap = {};
 
     for (final t in all) {
-      // Latest M-Pesa balance from SMS
       if (t.balanceAfter > 0) {
         if (lastBalanceTime == null ||
             t.createdAt.isAfter(lastBalanceTime)) {
@@ -79,8 +77,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           lastBalanceTime = t.createdAt;
         }
       }
-
-      // Custody totals
       if (t.type == 'custody_receive') {
         custody += t.amount;
         final label = t.poolLabel ?? 'Unnamed';
@@ -91,51 +87,38 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final label = t.poolLabel ?? 'Unnamed';
         poolMap[label] = (poolMap[label] ?? 0) - t.amount;
       }
-
-      // Receivables totals
       if (t.type == 'receivable_create') receivables += t.amount;
       if (t.type == 'receivable_clear') receivables -= t.amount;
     }
 
-    // Opening balances from accounts table (excluding M-Pesa)
     double openingTotal = 0;
     for (final a in accounts) {
       if (a.name != 'M-Pesa') {
-        final manual = a.manualBalance;
-        if (manual != null) {
-          // Manual correction overrides opening balance
-          // Add tagged movements since the correction date
-          final movements = bucketBalances[a.name] ?? 0.0;
-          openingTotal += manual + movements;
+        if (a.manualBalance != null) {
+          openingTotal += a.manualBalance!;
         } else {
-          openingTotal += a.openingBalance + (bucketBalances[a.name] ?? 0.0);
+          openingTotal +=
+              a.openingBalance + (bucketBalances[a.name] ?? 0.0);
         }
       }
     }
 
-    // Filter open pools only
     final openPools = poolMap.entries
         .where((e) => e.value > 0)
         .map((e) => {'label': e.key, 'balance': e.value})
         .toList();
 
-    // Open receivables list
     final openReceivables = all
         .where((t) => t.type == 'receivable_create')
         .toList();
 
-    // Recent 5 tagged transactions
-    final recent = all
-        .where((t) => t.isTagged)
-        .take(5)
-        .toList();
+    final recent = all.where((t) => t.isTagged).take(5).toList();
 
     setState(() {
       _mpesaBalance = mpesaBalance;
       _custodyHeld = custody.clamp(0, double.infinity);
       _openReceivablesTotal = receivables.clamp(0, double.infinity);
       _bucketTotal = openingTotal;
-      _bucketBalances = bucketBalances;
       _custodyPools = openPools;
       _openReceivables = openReceivables;
       _recent = recent;
@@ -150,290 +133,326 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
-      appBar: AppBar(
-        title: const Text('Dashboard'),
-        backgroundColor: const Color(0xFF1A73E8),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _load,
-          ),
-        ],
-      ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: _gold))
           : RefreshIndicator(
+              color: _gold,
               onRefresh: _load,
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  _buildNetWorthCard(),
-                  const SizedBox(height: 12),
-                  _buildStatRow(),
-                  const SizedBox(height: 20),
-                  if (_openReceivables.isNotEmpty) ...[
-                    _buildSectionHeader(
-                        'Owed to me', _openReceivablesTotal),
-                    const SizedBox(height: 8),
-                    ..._openReceivables.map(_buildReceivableRow),
-                    const SizedBox(height: 20),
-                  ],
-                  if (_custodyPools.isNotEmpty) ...[
-                    _buildSectionHeader(
-                        "I'm holding", _custodyHeld),
-                    const SizedBox(height: 8),
-                    ..._custodyPools.map(_buildCustodyRow),
-                    const SizedBox(height: 20),
-                  ],
-                  if (_recent.isNotEmpty) ...[
-                    _buildSectionHeader('Recent', null),
-                    const SizedBox(height: 8),
-                    ..._recent.map(_buildTxRow),
-                  ],
+              child: CustomScrollView(
+                slivers: [
+                  // ── Dark top section ──────────────────────────────
+                  SliverToBoxAdapter(child: _buildTopSection()),
+                  // ── Body ─────────────────────────────────────────
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+                    sliver: SliverList(
+                      delegate: SliverChildListDelegate([
+                        if (_openReceivables.isNotEmpty) ...[
+                          _sectionTitle('Owed to me',
+                              total: _openReceivablesTotal,
+                              color: _incomeColor),
+                          ..._openReceivables
+                              .map(_buildReceivableRow),
+                          const SizedBox(height: 16),
+                        ],
+                        if (_custodyPools.isNotEmpty) ...[
+                          _sectionTitle("I'm holding",
+                              total: _custodyHeld,
+                              color: _holdingColor),
+                          ..._custodyPools.map(_buildCustodyRow),
+                          const SizedBox(height: 16),
+                        ],
+                        if (_recent.isNotEmpty) ...[
+                          _sectionTitle('Recent', color: Colors.grey),
+                          ..._recent.map(_buildTxRow),
+                        ],
+                      ]),
+                    ),
+                  ),
                 ],
               ),
             ),
     );
   }
 
-  // ── Net worth card ─────────────────────────────────────────────────
-  Widget _buildNetWorthCard() {
+  // ── Top section ───────────────────────────────────────────────────
+  Widget _buildTopSection() {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A73E8),
-        borderRadius: BorderRadius.circular(16),
-      ),
+      color: _green,
+      padding: const EdgeInsets.fromLTRB(20, 56, 20, 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('True Net Worth',
-              style: TextStyle(color: Colors.white70, fontSize: 13)),
-          const SizedBox(height: 6),
+          // App label + refresh
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'M-PESA TRACKER',
+                style: TextStyle(
+                  fontSize: 9,
+                  color: _gold.withOpacity(0.6),
+                  letterSpacing: 2,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              GestureDetector(
+                onTap: _load,
+                child: Icon(Icons.refresh,
+                    color: _gold.withOpacity(0.5), size: 16),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // Net worth label
+          Text(
+            'True Net Worth',
+            style: TextStyle(
+                fontSize: 12, color: Colors.white.withOpacity(0.45)),
+          ),
+          const SizedBox(height: 4),
+          // Big number
           Text(
             'Ksh ${_trueNetWorth.toStringAsFixed(2)}',
             style: const TextStyle(
-                color: Colors.white,
-                fontSize: 30,
-                fontWeight: FontWeight.w700),
+              fontSize: 34,
+              fontWeight: FontWeight.w700,
+              color: _gold,
+              letterSpacing: -1,
+            ),
           ),
           const SizedBox(height: 4),
           Text(
-            'M-Pesa + accounts − custody held + owed to me',
+            'M-Pesa + accounts − holding + owed to me',
             style: TextStyle(
-                color: Colors.white.withOpacity(0.6), fontSize: 11),
+                fontSize: 10, color: Colors.white.withOpacity(0.3)),
+          ),
+          const SizedBox(height: 16),
+          // Inline stat row
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                _statCell('M-Pesa',
+                    'Ksh ${_mpesaBalance.toStringAsFixed(2)}',
+                    Colors.white),
+                _statDivider(),
+                _statCell('Holding',
+                    'Ksh ${_custodyHeld.toStringAsFixed(2)}',
+                    _holdingColor),
+                _statDivider(),
+                _statCell('Owed to me',
+                    'Ksh ${_openReceivablesTotal.toStringAsFixed(2)}',
+                    _incomeColor),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  // ── Stat row ───────────────────────────────────────────────────────
-  Widget _buildStatRow() {
-    return Row(
-      children: [
-        Expanded(child: _statTile(
-          'M-Pesa',
-          'Ksh ${_mpesaBalance.toStringAsFixed(2)}',
-          Colors.blue,
-          Icons.phone_android,
-        )),
-        const SizedBox(width: 8),
-        Expanded(child: _statTile(
-          'Holding',
-          '− Ksh ${_custodyHeld.toStringAsFixed(2)}',
-          Colors.orange,
-          Icons.wallet,
-        )),
-        const SizedBox(width: 8),
-        Expanded(child: _statTile(
-          'Owed to me',
-          '+ Ksh ${_openReceivablesTotal.toStringAsFixed(2)}',
-          Colors.green,
-          Icons.arrow_downward,
-        )),
-      ],
+  Widget _statCell(String label, String value, Color valueColor) {
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Column(
+          children: [
+            Text(value,
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: valueColor)),
+            const SizedBox(height: 3),
+            Text(label,
+                style: TextStyle(
+                    fontSize: 9,
+                    color: Colors.white.withOpacity(0.35))),
+          ],
+        ),
+      ),
     );
   }
 
-  Widget _statTile(
-      String label, String value, Color color, IconData icon) {
+  Widget _statDivider() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[200]!),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      width: 0.5,
+      height: 28,
+      color: Colors.white.withOpacity(0.08),
+    );
+  }
+
+  // ── Section title ─────────────────────────────────────────────────
+  Widget _sectionTitle(String title,
+      {double? total, required Color color}) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 20, bottom: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Icon(icon, size: 16, color: color),
-          const SizedBox(height: 6),
-          Text(label,
-              style: TextStyle(fontSize: 10, color: Colors.grey[500])),
-          const SizedBox(height: 2),
-          Text(value,
+          Text(title.toUpperCase(),
               style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 10,
                   fontWeight: FontWeight.w600,
-                  color: color)),
+                  color: Colors.grey[400],
+                  letterSpacing: 0.8)),
+          if (total != null)
+            Text('Ksh ${total.toStringAsFixed(2)}',
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: color)),
         ],
       ),
     );
   }
 
-  // ── Section header ─────────────────────────────────────────────────
-  Widget _buildSectionHeader(String title, double? total) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(title,
-            style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: Colors.black87)),
-        if (total != null)
-          Text('Ksh ${total.toStringAsFixed(2)}',
-              style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey[600])),
-      ],
-    );
-  }
-
-  // ── Receivable row ─────────────────────────────────────────────────
+  // ── Receivable row ────────────────────────────────────────────────
   Widget _buildReceivableRow(Transaction t) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      margin: const EdgeInsets.only(bottom: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.green[100]!),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.receipt_long, color: Colors.green[400], size: 18),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              t.receivableLabel ?? t.recipient,
-              style: const TextStyle(
-                  fontSize: 13, fontWeight: FontWeight.w500),
-            ),
-          ),
-          Text(
-            'Ksh ${t.amount.toInt()}',
-            style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: Colors.green),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Custody pool row ───────────────────────────────────────────────
-  Widget _buildCustodyRow(Map<String, dynamic> pool) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.orange[100]!),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.wallet, color: Colors.orange[400], size: 18),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              pool['label'] as String,
-              style: const TextStyle(
-                  fontSize: 13, fontWeight: FontWeight.w500),
-            ),
-          ),
-          Text(
-            'Ksh ${(pool['balance'] as double).toInt()}',
-            style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: Colors.orange),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Recent transaction row ─────────────────────────────────────────
-  Widget _buildTxRow(Transaction t) {
-    final isIn = t.direction == 'in';
-    final color = isIn ? Colors.green : Colors.red;
-    final prefix = isIn ? '+' : '−';
-    final label = _typeLabel(t.type ?? 'untagged');
-    final sub = t.category ??
-        t.bucketName ??
-        t.poolLabel ??
-        t.receivableLabel ??
-        t.recipient;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[200]!),
+        borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
         children: [
           Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(
-              isIn ? Icons.arrow_downward : Icons.arrow_upward,
-              color: color,
-              size: 16,
-            ),
+            width: 7,
+            height: 7,
+            decoration: const BoxDecoration(
+                color: _incomeColor, shape: BoxShape.circle),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label,
-                    style: const TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.w500)),
-                if (sub.isNotEmpty)
-                  Text(sub,
-                      style: TextStyle(
-                          fontSize: 11, color: Colors.grey[500]),
-                      overflow: TextOverflow.ellipsis),
-              ],
-            ),
+            child: Text(t.receivableLabel ?? t.recipient,
+                style: const TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w500)),
           ),
-          Text(
-            '$prefix Ksh ${t.amount.toInt()}',
-            style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: color),
-          ),
+          Text('Ksh ${t.amount.toInt()}',
+              style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: _incomeColor)),
         ],
       ),
     );
   }
+
+  // ── Custody row ───────────────────────────────────────────────────
+  Widget _buildCustodyRow(Map<String, dynamic> pool) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: const BoxDecoration(
+                color: _holdingColor, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(pool['label'] as String,
+                style: const TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w500)),
+          ),
+          Text('Ksh ${(pool['balance'] as double).toInt()}',
+              style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: _holdingColor)),
+        ],
+      ),
+    );
+  }
+
+  // ── Recent tx row ─────────────────────────────────────────────────
+Widget _buildTxRow(Transaction t) {
+  final isIn = t.direction == 'in';
+  final color = isIn ? _incomeColor : _expenseColor;
+  final prefix = isIn ? '+' : '−';
+  final label = _typeLabel(t.type ?? 'untagged');
+  final sub = t.category ??
+      t.bucketName ??
+      t.poolLabel ??
+      t.receivableLabel ??
+      t.recipient;
+
+  final date = t.createdAt;
+  final timeStr =
+      '${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+
+  return Container(
+    margin: const EdgeInsets.only(bottom: 5),
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(10),
+    ),
+    child: Row(
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+                color: color.withOpacity(0.15), width: 0.5),
+          ),
+          child: Icon(
+            isIn ? Icons.arrow_downward : Icons.arrow_upward,
+            color: color,
+            size: 15,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label,
+                  style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.black87)),
+              if (sub.isNotEmpty)
+                Text(sub,
+                    style: TextStyle(
+                        fontSize: 11, color: Colors.grey[400]),
+                    overflow: TextOverflow.ellipsis),
+            ],
+          ),
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              '$prefix Ksh ${t.amount.toInt()}',
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: color),
+            ),
+            Text(timeStr,
+                style: TextStyle(
+                    fontSize: 10, color: Colors.grey[400])),
+          ],
+        ),
+      ],
+    ),
+  );
+}
 
   String _typeLabel(String type) {
     switch (type) {

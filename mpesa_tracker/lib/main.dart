@@ -5,6 +5,7 @@ import 'overlay_channel.dart';
 import 'dashboard_screen.dart';
 import 'setup_screen.dart';
 import 'main_shell.dart';
+import 'services/setup_service.dart';
 
 final AppDatabase db = AppDatabase();
 
@@ -52,7 +53,7 @@ class _AppEntryState extends State<AppEntry> {
   }
 
   Future<void> _route() async {
-    final setupDone = await db.hasCompletedSetup();
+    final setupDone = await SetupService.hasCompletedSetup();
     if (!mounted) return;
     if (setupDone) {
       Navigator.of(context).pushReplacementNamed('/dashboard');

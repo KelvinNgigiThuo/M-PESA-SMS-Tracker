@@ -3,6 +3,11 @@ import 'main.dart';
 import 'database/app_database.dart';
 import 'package:drift/drift.dart' as drift;
 
+// ── Colour constants ──────────────────────────────────────────────────
+const _green = Color(0xFF1A3C34);
+const _gold = Color(0xFFC9A84C);
+const _white = Colors.white;
+
 Future<void> showTagCard(BuildContext context, Map<String, dynamic> data) async {
   final amount = (data['amount'] as num).toDouble();
   final txCost = (data['txCost'] as num?)?.toDouble() ?? 0.0;
@@ -10,18 +15,7 @@ Future<void> showTagCard(BuildContext context, Map<String, dynamic> data) async 
   final direction = data['direction'] as String;
   final txCode = data['txCode'] as String;
   final balance = (data['balance'] as num).toDouble();
-  // Auto-update secondary account balance if present (M-Shwari, KCB M-Pesa)
-  final secondaryBalance = (data['secondaryBalance'] as num?)?.toDouble() ?? 0.0;
-  final secondaryAccount = data['secondaryAccount'] as String? ?? '';
 
-  if (secondaryBalance > 0 && secondaryAccount.isNotEmpty) {
-    final account = await db.getAccountByName(secondaryAccount);
-    if (account != null) {
-      await db.setManualBalance(account.id, secondaryBalance);
-    }
-  }
-
-  // Auto-save transaction fee silently before showing card
   if (txCost > 0) {
     await db.insertTransaction(TransactionsCompanion(
       txCode: drift.Value('${txCode}_fee'),
@@ -35,6 +29,17 @@ Future<void> showTagCard(BuildContext context, Map<String, dynamic> data) async 
       createdAt: drift.Value(DateTime.now()),
       isTagged: drift.Value(true),
     ));
+  }
+
+  final secondaryBalance =
+      (data['secondaryBalance'] as num?)?.toDouble() ?? 0.0;
+  final secondaryAccount = data['secondaryAccount'] as String? ?? '';
+
+  if (secondaryBalance > 0 && secondaryAccount.isNotEmpty) {
+    final account = await db.getAccountByName(secondaryAccount);
+    if (account != null) {
+      await db.setManualBalance(account.id, secondaryBalance);
+    }
   }
 
   if (!context.mounted) return;
@@ -77,8 +82,6 @@ class _TagCardState extends State<_TagCard> {
   String _screen = 'root';
   String? _selectedCategory;
   final _noteController = TextEditingController();
-
-  // For receivable matching
   List<Transaction> _receivables = [];
   bool _loadingReceivables = false;
 
@@ -91,26 +94,30 @@ class _TagCardState extends State<_TagCard> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.all(12),
+      margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(20),
+        color: _green,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+            color: _gold.withOpacity(0.25), width: 0.5),
       ),
       padding: EdgeInsets.fromLTRB(
         16, 12, 16,
-        MediaQuery.of(context).viewInsets.bottom + 32,
+        MediaQuery.of(context).viewInsets.bottom + 24,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Handle
           Container(
-            width: 36, height: 4,
+            width: 36,
+            height: 3,
             decoration: BoxDecoration(
-              color: Colors.grey[300],
+              color: _white.withOpacity(0.2),
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           _buildScreen(),
         ],
       ),
@@ -119,48 +126,135 @@ class _TagCardState extends State<_TagCard> {
 
   Widget _buildScreen() {
     switch (_screen) {
-      case 'root':              return _buildRoot();
-      case 'bucket':            return _buildBucketPicker();
-      // Outflow branches
-      case 'not_mine':          return _buildNotMine();
-      case 'custody':           return _buildCustodyNote();
-      case 'reimbursable':      return _buildReimbursableNote();
-      case 'expense':           return _buildExpense();
-      // Inflow branches
-      case 'inflow_not_mine':   return _buildInflowNotMine();
-      case 'custody_receive':   return _buildCustodyReceive();
-      case 'receivable_match':  return _buildReceivableMatch();
-      default:                  return _buildRoot();
+      case 'root':             return _buildRoot();
+      case 'bucket':           return _buildBucketPicker();
+      case 'not_mine':         return _buildNotMine();
+      case 'custody':          return _buildCustodyNote();
+      case 'reimbursable':     return _buildReimbursableNote();
+      case 'expense':          return _buildExpense();
+      case 'inflow_not_mine':  return _buildInflowNotMine();
+      case 'custody_receive':  return _buildCustodyReceive();
+      case 'receivable_match': return _buildReceivableMatch();
+      default:                 return _buildRoot();
     }
   }
 
-  // ── Header ────────────────────────────────────────────────────────
-  Widget _buildHeader(String label, {String? backScreen}) {
+  // ── Shared header ─────────────────────────────────────────────────
+  Widget _header(String label, {String? backScreen}) {
     return Row(
       children: [
         if (backScreen != null)
           GestureDetector(
             onTap: () => setState(() => _screen = backScreen),
-            child: const Icon(Icons.chevron_left, color: Colors.grey),
+            child: Icon(Icons.chevron_left,
+                color: _white.withOpacity(0.5), size: 20),
           ),
         if (backScreen != null) const SizedBox(width: 4),
         Expanded(
           child: Text(label,
-              style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              style: TextStyle(
+                  fontSize: 11,
+                  color: _white.withOpacity(0.5))),
         ),
         GestureDetector(
           onTap: () => _saveUntagged(),
-          child: const Icon(Icons.close, color: Colors.grey, size: 18),
+          child: Icon(Icons.close,
+              color: _white.withOpacity(0.4), size: 18),
         ),
       ],
     );
   }
 
-  // ── Screen: root ──────────────────────────────────────────────────
+  // ── Amount display ────────────────────────────────────────────────
+  Widget _amountRow(String subLabel) {
+    final amtStr = widget.amount % 1 == 0
+        ? 'Ksh ${widget.amount.toInt()}'
+        : 'Ksh ${widget.amount.toStringAsFixed(2)}';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(amtStr,
+            style: const TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w700,
+                color: _gold,
+                letterSpacing: -0.5)),
+        Text(subLabel,
+            style: TextStyle(
+                fontSize: 12,
+                color: _white.withOpacity(0.45))),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  // ── Flow row (root option) ────────────────────────────────────────
+  Widget _flowRow({
+    required IconData icon,
+    required Color iconColor,
+    required Color iconBg,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+    bool last = false,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          border: last
+              ? null
+              : Border(
+                  bottom: BorderSide(
+                      color: _white.withOpacity(0.08),
+                      width: 0.5)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: iconBg,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                    color: iconColor.withOpacity(0.3),
+                    width: 0.5),
+              ),
+              child: Icon(icon, color: iconColor, size: 17),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: _white)),
+                  Text(subtitle,
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: _white.withOpacity(0.4))),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right,
+                color: _white.withOpacity(0.25), size: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Root screen ───────────────────────────────────────────────────
   Widget _buildRoot() {
     final isOut = widget.direction == 'out';
-    final amountLabel = 'Ksh ${widget.amount.toInt()}';
-    final subLabel = '${isOut ? "to" : "from"} ${widget.recipient}';
+    final dirLabel = isOut
+        ? 'to ${widget.recipient}'
+        : 'from ${widget.recipient}';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -168,44 +262,72 @@ class _TagCardState extends State<_TagCard> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(amountLabel,
-                style: const TextStyle(
-                    fontSize: 22, fontWeight: FontWeight.w600)),
+            Expanded(child: _amountRow(dirLabel)),
             GestureDetector(
               onTap: () => _saveUntagged(),
-              child: const Icon(Icons.close, color: Colors.grey),
+              child: Icon(Icons.close,
+                  color: _white.withOpacity(0.4), size: 20),
             ),
           ],
         ),
-        Text(subLabel,
-            style: TextStyle(fontSize: 13, color: Colors.grey[600])),
-        const SizedBox(height: 20),
         if (isOut) ...[
-          // ── Outflow root ──
-          _rootBtn(Icons.account_balance, 'My account', Colors.blue,
-              () => setState(() => _screen = 'bucket')),
-          const SizedBox(height: 8),
-          _rootBtn(Icons.block, 'Not mine', Colors.blue,
-              () => setState(() => _screen = 'not_mine')),
-          const SizedBox(height: 8),
-          _rootBtn(Icons.receipt_long, 'True expense', Colors.red,
-              () => setState(() => _screen = 'expense')),
+          _flowRow(
+            icon: Icons.account_balance_outlined,
+            iconColor: _gold,
+            iconBg: _gold.withOpacity(0.12),
+            title: 'My account',
+            subtitle: 'Transfer to a bucket',
+            onTap: () => setState(() => _screen = 'bucket'),
+          ),
+          _flowRow(
+            icon: Icons.swap_horiz,
+            iconColor: const Color(0xFF4a9eff),
+            iconBg: const Color(0xFF4a9eff).withOpacity(0.12),
+            title: 'Not mine',
+            subtitle: 'Custody or reimbursable',
+            onTap: () => setState(() => _screen = 'not_mine'),
+          ),
+          _flowRow(
+            icon: Icons.receipt_outlined,
+            iconColor: const Color(0xFFe87070),
+            iconBg: const Color(0xFFe87070).withOpacity(0.12),
+            title: 'True expense',
+            subtitle: 'From my own pocket',
+            onTap: () => setState(() => _screen = 'expense'),
+            last: true,
+          ),
         ] else ...[
-          // ── Inflow root ──
-          _rootBtn(Icons.account_balance, 'From my account', Colors.blue,
-              () => setState(() => _screen = 'bucket')),
-          const SizedBox(height: 8),
-          _rootBtn(Icons.swap_horiz, 'Not mine', Colors.blue,
-              () => setState(() => _screen = 'inflow_not_mine')),
-          const SizedBox(height: 8),
-          _rootBtn(Icons.trending_up, 'True income', Colors.green,
-              () => _saveIncome()),
+          _flowRow(
+            icon: Icons.account_balance_outlined,
+            iconColor: _gold,
+            iconBg: _gold.withOpacity(0.12),
+            title: 'From my account',
+            subtitle: 'Transfer from a bucket',
+            onTap: () => setState(() => _screen = 'bucket'),
+          ),
+          _flowRow(
+            icon: Icons.swap_horiz,
+            iconColor: const Color(0xFF4a9eff),
+            iconBg: const Color(0xFF4a9eff).withOpacity(0.12),
+            title: 'Not mine',
+            subtitle: 'Custody or payment received',
+            onTap: () => setState(() => _screen = 'inflow_not_mine'),
+          ),
+          _flowRow(
+            icon: Icons.trending_up,
+            iconColor: const Color(0xFF5ec47a),
+            iconBg: const Color(0xFF5ec47a).withOpacity(0.12),
+            title: 'True income',
+            subtitle: 'Into my own pocket',
+            onTap: () => _saveIncome(),
+            last: true,
+          ),
         ],
       ],
     );
   }
 
-  // ── Screen: bucket picker (shared outflow + inflow) ───────────────
+  // ── Bucket picker ─────────────────────────────────────────────────
   Widget _buildBucketPicker() {
     final isOut = widget.direction == 'out';
     final label = isOut
@@ -213,75 +335,82 @@ class _TagCardState extends State<_TagCard> {
         : 'From my account · Ksh ${widget.amount.toInt()}';
 
     final buckets = [
-      {'name': 'Other M-Pesa', 'icon': Icons.phone_android},
-      {'name': 'NCBA', 'icon': Icons.account_balance},
-      {'name': 'KCB Bank', 'icon': Icons.account_balance},
-      {'name': 'KCB M-Pesa', 'icon': Icons.account_balance_wallet},
-      {'name': 'M-Shwari', 'icon': Icons.savings},
-      {'name': 'M-Shwari Lock', 'icon': Icons.lock},
-      {'name': 'KCB M-Pesa Lock', 'icon': Icons.lock},
-      {'name': 'Etica', 'icon': Icons.trending_up},
-      {'name': 'Company', 'icon': Icons.business},
+      {'name': 'Other M-Pesa',   'icon': Icons.phone_android},
+      {'name': 'NCBA',           'icon': Icons.account_balance},
+      {'name': 'KCB Bank',       'icon': Icons.account_balance},
+      {'name': 'KCB M-Pesa',     'icon': Icons.account_balance_wallet},
+      {'name': 'M-Shwari',       'icon': Icons.savings},
+      {'name': 'M-Shwari Lock',  'icon': Icons.lock_outline},
+      {'name': 'KCB M-Pesa Lock','icon': Icons.lock_outline},
+      {'name': 'Etica',          'icon': Icons.trending_up},
+      {'name': 'Company',        'icon': Icons.business_outlined},
     ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildHeader(label, backScreen: 'root'),
-        const SizedBox(height: 16),
+        _header(label, backScreen: 'root'),
+        const SizedBox(height: 14),
         GridView.count(
           crossAxisCount: 2,
           shrinkWrap: true,
           mainAxisSpacing: 8,
           crossAxisSpacing: 8,
-          childAspectRatio: 2.2,
+          childAspectRatio: 2.4,
           physics: const NeverScrollableScrollPhysics(),
-          children: buckets.map((b) {
-            return GestureDetector(
+          children: [
+            ...buckets.map((b) => GestureDetector(
               onTap: () => _saveTransfer(b['name'] as String),
               child: Container(
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey[300]!),
+                  color: _gold.withOpacity(0.08),
                   borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: _gold.withOpacity(0.2), width: 0.5),
                 ),
-                child: Column(
+                child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(b['icon'] as IconData,
-                        color: Colors.blue, size: 20),
-                    const SizedBox(height: 4),
-                    Text(b['name'] as String,
-                        style: const TextStyle(
-                            fontSize: 11, fontWeight: FontWeight.w500)),
+                        color: _gold, size: 15),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(b['name'] as String,
+                          style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: _white),
+                          overflow: TextOverflow.ellipsis),
+                    ),
                   ],
                 ),
               ),
-            );
-          }).toList()
-            ..add(
-              GestureDetector(
-                onTap: () => _showAddBucket(context),
-                child: Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                        color: Colors.blue[200]!, style: BorderStyle.solid),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: const [
-                      Icon(Icons.add, color: Colors.blue, size: 20),
-                      SizedBox(height: 4),
-                      Text('Add new',
-                          style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.blue)),
-                    ],
-                  ),
+            )),
+            GestureDetector(
+              onTap: () => _showAddBucket(context),
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: _gold.withOpacity(0.3),
+                      style: BorderStyle.solid,
+                      width: 0.5),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.add,
+                        color: _gold.withOpacity(0.7), size: 15),
+                    const SizedBox(width: 6),
+                    Text('Add new',
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: _gold.withOpacity(0.7))),
+                  ],
                 ),
               ),
             ),
+          ],
         ),
       ],
     );
@@ -292,21 +421,28 @@ class _TagCardState extends State<_TagCard> {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
+        backgroundColor: _green,
         title: const Text('Add account',
-            style: TextStyle(fontSize: 15)),
+            style: TextStyle(fontSize: 15, color: _white)),
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(
+          style: const TextStyle(color: _white),
+          decoration: InputDecoration(
             hintText: 'e.g. CIC Money Market',
-            border: OutlineInputBorder(),
-            isDense: true,
+            hintStyle: TextStyle(color: _white.withOpacity(0.4)),
+            enabledBorder: UnderlineInputBorder(
+                borderSide:
+                    BorderSide(color: _gold.withOpacity(0.5))),
+            focusedBorder: const UnderlineInputBorder(
+                borderSide: BorderSide(color: _gold)),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text('Cancel',
+                style: TextStyle(color: _white.withOpacity(0.5))),
           ),
           TextButton(
             onPressed: () {
@@ -316,261 +452,309 @@ class _TagCardState extends State<_TagCard> {
                 _saveTransfer(name);
               }
             },
-            child: const Text('Save'),
+            child: const Text('Save',
+                style: TextStyle(color: _gold)),
           ),
         ],
       ),
     );
   }
 
-  // ── Screen: outflow not-mine sub-choice ───────────────────────────
+  // ── Not mine sub-choice ───────────────────────────────────────────
   Widget _buildNotMine() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildHeader('Not mine · Ksh ${widget.amount.toInt()}',
+        _header('Not mine · Ksh ${widget.amount.toInt()}',
             backScreen: 'root'),
-        const SizedBox(height: 16),
-        _rootBtn(Icons.wallet, "I'm holding their money", Colors.blue,
-            () => setState(() {
-                  _noteController.clear();
-                  _screen = 'custody';
-                })),
-        const SizedBox(height: 8),
-        _rootBtn(Icons.undo, "I'll be paid back", Colors.blue,
-            () => setState(() {
-                  _noteController.clear();
-                  _screen = 'reimbursable';
-                })),
+        const SizedBox(height: 14),
+        _flowRow(
+          icon: Icons.wallet_outlined,
+          iconColor: const Color(0xFF4a9eff),
+          iconBg: const Color(0xFF4a9eff).withOpacity(0.12),
+          title: "I'm holding their money",
+          subtitle: 'Spending from a custody pool',
+          onTap: () => setState(() {
+            _noteController.clear();
+            _screen = 'custody';
+          }),
+        ),
+        _flowRow(
+          icon: Icons.undo,
+          iconColor: _gold,
+          iconBg: _gold.withOpacity(0.12),
+          title: "I'll be paid back",
+          subtitle: 'Creates a reimbursable record',
+          onTap: () => setState(() {
+            _noteController.clear();
+            _screen = 'reimbursable';
+          }),
+          last: true,
+        ),
       ],
     );
   }
 
-  // ── Screen: outflow custody note ──────────────────────────────────
+  // ── Inflow not mine ───────────────────────────────────────────────
+  Widget _buildInflowNotMine() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _header('Not mine · Ksh ${widget.amount.toInt()}',
+            backScreen: 'root'),
+        const SizedBox(height: 14),
+        _flowRow(
+          icon: Icons.add_circle_outline,
+          iconColor: const Color(0xFF4a9eff),
+          iconBg: const Color(0xFF4a9eff).withOpacity(0.12),
+          title: "Adding to a pool I'm holding",
+          subtitle: 'Tops up a custody pool',
+          onTap: () => setState(() {
+            _noteController.clear();
+            _screen = 'custody_receive';
+          }),
+        ),
+        _flowRow(
+          icon: Icons.check_circle_outline,
+          iconColor: const Color(0xFF5ec47a),
+          iconBg: const Color(0xFF5ec47a).withOpacity(0.12),
+          title: "Clears what I'm owed",
+          subtitle: 'Match to an open receivable',
+          onTap: () => _loadReceivables(),
+          last: true,
+        ),
+      ],
+    );
+  }
+
+  // ── Note field shared ─────────────────────────────────────────────
+  Widget _noteField(String hint) {
+    return TextField(
+      controller: _noteController,
+      autofocus: true,
+      style: const TextStyle(color: _white, fontSize: 14),
+      cursorColor: _gold,
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: TextStyle(color: _white.withOpacity(0.3)),
+        enabledBorder: UnderlineInputBorder(
+            borderSide: BorderSide(color: _white.withOpacity(0.15))),
+        focusedBorder: const UnderlineInputBorder(
+            borderSide: BorderSide(color: _gold)),
+      ),
+    );
+  }
+
+  // ── Custody note ──────────────────────────────────────────────────
   Widget _buildCustodyNote() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildHeader(
-            "Holding their money · Ksh ${widget.amount.toInt()}",
+        _header("Holding their money · Ksh ${widget.amount.toInt()}",
             backScreen: 'not_mine'),
         const SizedBox(height: 16),
-        const Text("What's this for?",
-            style: TextStyle(fontSize: 12, color: Colors.grey)),
-        const SizedBox(height: 6),
-        TextField(
-          controller: _noteController,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'e.g. Fuel float, Westlands job',
-            border: OutlineInputBorder(),
-            isDense: true,
-          ),
-        ),
-        const SizedBox(height: 12),
+        Text("What's this for?",
+            style: TextStyle(
+                fontSize: 11, color: _white.withOpacity(0.5))),
+        const SizedBox(height: 8),
+        _noteField('e.g. Fuel float, Westlands job'),
+        const SizedBox(height: 20),
         _saveBtn('Save', () => _saveCustodySpend()),
       ],
     );
   }
 
-  // ── Screen: outflow reimbursable note ─────────────────────────────
+  // ── Reimbursable note ─────────────────────────────────────────────
   Widget _buildReimbursableNote() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildHeader("Pay me back · Ksh ${widget.amount.toInt()}",
+        _header("Pay me back · Ksh ${widget.amount.toInt()}",
             backScreen: 'not_mine'),
         const SizedBox(height: 16),
-        const Text("Which job is this for?",
-            style: TextStyle(fontSize: 12, color: Colors.grey)),
-        const SizedBox(height: 6),
-        TextField(
-          controller: _noteController,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'e.g. Client X supplies',
-            border: OutlineInputBorder(),
-            isDense: true,
-          ),
-        ),
-        const SizedBox(height: 12),
+        Text("Which job is this for?",
+            style: TextStyle(
+                fontSize: 11, color: _white.withOpacity(0.5))),
+        const SizedBox(height: 8),
+        _noteField('e.g. Client X supplies'),
+        const SizedBox(height: 20),
         _saveBtn('Save', () => _saveReimbursable()),
       ],
     );
   }
 
-  // ── Screen: outflow expense category ─────────────────────────────
-  Widget _buildExpense() {
-    const categories = ['Food', 'Transport', 'Supplies', 'Bills', 'Other'];
+  // ── Custody receive ───────────────────────────────────────────────
+  Widget _buildCustodyReceive() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildHeader('True expense · Ksh ${widget.amount.toInt()}',
+        _header("Adding to pool · Ksh ${widget.amount.toInt()}",
+            backScreen: 'inflow_not_mine'),
+        const SizedBox(height: 16),
+        Text("What pool is this for?",
+            style: TextStyle(
+                fontSize: 11, color: _white.withOpacity(0.5))),
+        const SizedBox(height: 8),
+        _noteField('e.g. Fuel float, Westlands job'),
+        const SizedBox(height: 20),
+        _saveBtn('Save', () => _saveCustodyReceive()),
+      ],
+    );
+  }
+
+  // ── Expense picker ────────────────────────────────────────────────
+  Widget _buildExpense() {
+    const categories = [
+      'Food', 'Transport', 'Supplies', 'Bills', 'Airtime', 'Other'
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _header('True expense · Ksh ${widget.amount.toInt()}',
             backScreen: 'root'),
         const SizedBox(height: 16),
         Wrap(
           spacing: 8,
           runSpacing: 8,
           children: categories.map((c) {
-            return ChoiceChip(
-              label: Text(c),
-              selected: _selectedCategory == c,
-              onSelected: (_) =>
-                  setState(() => _selectedCategory = c),
+            final selected = _selectedCategory == c;
+            return GestureDetector(
+              onTap: () => setState(() => _selectedCategory = c),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: selected
+                      ? const Color(0xFFe87070).withOpacity(0.2)
+                      : _white.withOpacity(0.06),
+                  borderRadius: BorderRadius.circular(99),
+                  border: Border.all(
+                    color: selected
+                        ? const Color(0xFFe87070).withOpacity(0.6)
+                        : _white.withOpacity(0.12),
+                    width: 0.5,
+                  ),
+                ),
+                child: Text(c,
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: selected
+                            ? FontWeight.w600
+                            : FontWeight.w400,
+                        color: selected
+                            ? const Color(0xFFe87070)
+                            : _white.withOpacity(0.8))),
+              ),
             );
           }).toList(),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
         _saveBtn('Save',
             _selectedCategory == null ? null : () => _saveExpense()),
       ],
     );
   }
 
-  // ── Screen: inflow not-mine sub-choice ────────────────────────────
-  Widget _buildInflowNotMine() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildHeader('Not mine · Ksh ${widget.amount.toInt()}',
-            backScreen: 'root'),
-        const SizedBox(height: 16),
-        _rootBtn(Icons.add_circle_outline, "Adding to a pool I'm holding",
-            Colors.blue, () => setState(() {
-                  _noteController.clear();
-                  _screen = 'custody_receive';
-                })),
-        const SizedBox(height: 8),
-        _rootBtn(Icons.check_circle_outline,
-            "Clears what I'm owed", Colors.blue,
-            () => _loadReceivables()),
-      ],
-    );
-  }
-
-  // ── Screen: inflow custody receive ───────────────────────────────
-  Widget _buildCustodyReceive() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildHeader(
-            "Adding to pool · Ksh ${widget.amount.toInt()}",
-            backScreen: 'inflow_not_mine'),
-        const SizedBox(height: 16),
-        const Text("What pool is this for?",
-            style: TextStyle(fontSize: 12, color: Colors.grey)),
-        const SizedBox(height: 6),
-        TextField(
-          controller: _noteController,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'e.g. Fuel float, Westlands job',
-            border: OutlineInputBorder(),
-            isDense: true,
-          ),
-        ),
-        const SizedBox(height: 12),
-        _saveBtn('Save', () => _saveCustodyReceive()),
-      ],
-    );
-  }
-
-  // ── Screen: receivable match ──────────────────────────────────────
+  // ── Receivable match ──────────────────────────────────────────────
   Widget _buildReceivableMatch() {
     if (_loadingReceivables) {
-      return Column(
-        children: [
-          _buildHeader(
-              "Clears what I'm owed · Ksh ${widget.amount.toInt()}",
-              backScreen: 'inflow_not_mine'),
-          const SizedBox(height: 24),
-          const Center(child: CircularProgressIndicator()),
-          const SizedBox(height: 24),
-        ],
-      );
+      return Column(children: [
+        _header("Clears what I'm owed · Ksh ${widget.amount.toInt()}",
+            backScreen: 'inflow_not_mine'),
+        const SizedBox(height: 24),
+        const Center(
+            child: CircularProgressIndicator(color: _gold)),
+        const SizedBox(height: 24),
+      ]);
     }
-
     if (_receivables.isEmpty) {
       return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildHeader(
-              "Clears what I'm owed · Ksh ${widget.amount.toInt()}",
-              backScreen: 'inflow_not_mine'),
-          const SizedBox(height: 16),
-          const Text(
-            'No open receivables found.\nTag this as True income instead.',
-            style: TextStyle(fontSize: 13, color: Colors.grey),
-          ),
-          const SizedBox(height: 16),
-          _saveBtn('Save as income', () => _saveIncome()),
-        ],
-      );
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _header(
+                "Clears what I'm owed · Ksh ${widget.amount.toInt()}",
+                backScreen: 'inflow_not_mine'),
+            const SizedBox(height: 16),
+            Text(
+              'No open receivables found.\nTag as True income instead.',
+              style: TextStyle(
+                  fontSize: 13, color: _white.withOpacity(0.5)),
+            ),
+            const SizedBox(height: 16),
+            _saveBtn('Save as income', () => _saveIncome()),
+          ]);
     }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _buildHeader(
-            "Clears what I'm owed · Ksh ${widget.amount.toInt()}",
+        _header("Clears what I'm owed · Ksh ${widget.amount.toInt()}",
             backScreen: 'inflow_not_mine'),
-        const SizedBox(height: 8),
-        const Text('Which receivable does this clear?',
-            style: TextStyle(fontSize: 12, color: Colors.grey)),
         const SizedBox(height: 10),
-        // Limit height so card doesn't overflow screen
         ConstrainedBox(
           constraints: const BoxConstraints(maxHeight: 220),
           child: ListView.separated(
             shrinkWrap: true,
             itemCount: _receivables.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 6),
+            separatorBuilder: (_, __) => Divider(
+                color: _white.withOpacity(0.08), height: 1),
             itemBuilder: (_, i) {
               final r = _receivables[i];
               final label = r.receivableLabel ?? 'Unnamed';
               final owed = r.amount;
               final incoming = widget.amount;
-              // Calculate what will happen on tap
-              final cleared = incoming >= owed ? owed : incoming;
-              final income = incoming > owed ? incoming - owed : 0.0;
-
+              final cleared =
+                  incoming >= owed ? owed : incoming;
+              final income =
+                  incoming > owed ? incoming - owed : 0.0;
               return GestureDetector(
                 onTap: () => _saveReceivableMatch(r),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey[300]!),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.receipt_long,
-                          color: Colors.blue, size: 18),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(label,
-                                style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500)),
-                            Text(
-                              income > 0
-                                  ? 'Clears Ksh ${cleared.toInt()} · Ksh ${income.toInt()} income'
-                                  : 'Clears Ksh ${cleared.toInt()} of Ksh ${owed.toInt()} owed',
-                              style: TextStyle(
-                                  fontSize: 11, color: Colors.grey[600]),
-                            ),
-                          ],
-                        ),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 10),
+                  child: Row(children: [
+                    Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF5ec47a)
+                            .withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(9),
+                        border: Border.all(
+                            color: const Color(0xFF5ec47a)
+                                .withOpacity(0.3),
+                            width: 0.5),
                       ),
-                      const Icon(Icons.chevron_right,
-                          color: Colors.grey, size: 16),
-                    ],
-                  ),
+                      child: const Icon(
+                          Icons.receipt_long_outlined,
+                          color: Color(0xFF5ec47a),
+                          size: 16),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                        child: Column(
+                            crossAxisAlignment:
+                                CrossAxisAlignment.start,
+                            children: [
+                          Text(label,
+                              style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: _white)),
+                          Text(
+                            income > 0
+                                ? 'Clears Ksh ${cleared.toInt()} · Ksh ${income.toInt()} income'
+                                : 'Clears Ksh ${cleared.toInt()} of Ksh ${owed.toInt()} owed',
+                            style: TextStyle(
+                                fontSize: 11,
+                                color:
+                                    _white.withOpacity(0.4)),
+                          ),
+                        ])),
+                    Icon(Icons.chevron_right,
+                        color: _white.withOpacity(0.25),
+                        size: 16),
+                  ]),
                 ),
               );
             },
@@ -580,7 +764,35 @@ class _TagCardState extends State<_TagCard> {
     );
   }
 
-  // ── Load receivables then switch screen ───────────────────────────
+  // ── Save button ───────────────────────────────────────────────────
+  Widget _saveBtn(String label, VoidCallback? onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 13),
+        decoration: BoxDecoration(
+          color: onTap == null
+              ? _white.withOpacity(0.08)
+              : _gold,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: onTap == null
+                ? _white.withOpacity(0.3)
+                : _green,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Load receivables ──────────────────────────────────────────────
   Future<void> _loadReceivables() async {
     setState(() {
       _loadingReceivables = true;
@@ -593,14 +805,13 @@ class _TagCardState extends State<_TagCard> {
     });
   }
 
-  // ── Save methods ──────────────────────────────────────────────────
- // ── Upsert — updates existing untagged record or inserts new ─────
+  // ── Upsert ────────────────────────────────────────────────────────
   Future<void> _upsert(TransactionsCompanion companion) async {
     final existing = await (db.select(db.transactions)
       ..where((t) =>
           t.txCode.equals(widget.txCode) &
           t.isTagged.equals(false)))
-    .getSingleOrNull();
+        .getSingleOrNull();
 
     if (existing != null) {
       await db.updateTaggedTransaction(
@@ -616,6 +827,7 @@ class _TagCardState extends State<_TagCard> {
     }
   }
 
+  // ── Save methods ──────────────────────────────────────────────────
   Future<void> _saveTransfer(String bucketName) async {
     await _upsert(TransactionsCompanion(
       txCode: drift.Value(widget.txCode),
@@ -709,7 +921,6 @@ class _TagCardState extends State<_TagCard> {
   Future<void> _saveReceivableMatch(Transaction receivable) async {
     final owed = receivable.amount;
     final incoming = widget.amount;
-
     await _upsert(TransactionsCompanion(
       txCode: drift.Value(widget.txCode),
       amount: drift.Value(incoming >= owed ? owed : incoming),
@@ -722,7 +933,6 @@ class _TagCardState extends State<_TagCard> {
       createdAt: drift.Value(DateTime.now()),
       isTagged: drift.Value(true),
     ));
-
     if (incoming > owed) {
       final excess = incoming - owed;
       await db.insertTransaction(TransactionsCompanion(
@@ -739,7 +949,6 @@ class _TagCardState extends State<_TagCard> {
         isTagged: drift.Value(true),
       ));
     }
-
     if (mounted) Navigator.pop(context);
   }
 
@@ -759,7 +968,21 @@ class _TagCardState extends State<_TagCard> {
   }
 
   Future<void> _saveUntagged() async {
-    await _upsert(TransactionsCompanion(
+    // Check if an untagged record already exists for this txCode
+    final existing = await (db.select(db.transactions)
+      ..where((t) =>
+          t.txCode.equals(widget.txCode) &
+          t.isTagged.equals(false)))
+    .getSingleOrNull();
+
+    if (existing != null) {
+      // Already saved as untagged — just close, nothing to do
+      if (mounted) Navigator.pop(context);
+      return;
+    }
+
+    // New SMS dismissed without tagging — save as untagged
+    await db.insertTransaction(TransactionsCompanion(
       txCode: drift.Value(widget.txCode),
       amount: drift.Value(widget.amount),
       recipient: drift.Value(widget.recipient),
@@ -770,56 +993,5 @@ class _TagCardState extends State<_TagCard> {
       isTagged: drift.Value(false),
     ));
     if (mounted) Navigator.pop(context);
-  }
-
-  // ── UI helpers ────────────────────────────────────────────────────
-  Widget _rootBtn(
-      IconData icon, String label, Color color, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        padding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey[300]!),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: color, size: 18),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(label,
-                  style: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w500)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _saveBtn(String label, VoidCallback? onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: onTap == null ? Colors.grey[200] : Colors.blue,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Text(
-          label,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: onTap == null ? Colors.grey : Colors.white,
-          ),
-        ),
-      ),
-    );
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'database/app_database.dart';
 import 'main.dart';
+import 'services/setup_service.dart';
 
 class SetupScreen extends StatefulWidget {
   const SetupScreen({super.key});
@@ -56,8 +57,9 @@ class _SetupScreenState extends State<SetupScreen> {
       await db.updateOpeningBalance(account.id, balance);
     }
 
+    await SetupService.markSetupComplete();
+
     if (mounted) {
-      // Navigate to dashboard and remove setup from stack
       Navigator.of(context).pushReplacementNamed('/dashboard');
     }
   }

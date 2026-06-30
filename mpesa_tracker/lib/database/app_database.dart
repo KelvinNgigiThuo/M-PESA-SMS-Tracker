@@ -136,13 +136,6 @@ class AppDatabase extends _$AppDatabase {
       (select(accounts)..where((a) => a.name.equals(name)))
       .getSingleOrNull();
 
-  Future<bool> hasCompletedSetup() async {
-    // Setup is complete if any account has a non-zero opening balance
-    final result = await (select(accounts)
-      ..where((a) => a.openingBalance.isBiggerThanValue(0)))
-    .getSingleOrNull();
-    return result != null;
-  }
 
   Future<void> updateOpeningBalance(int id, double balance) =>
       (update(accounts)..where((a) => a.id.equals(id)))

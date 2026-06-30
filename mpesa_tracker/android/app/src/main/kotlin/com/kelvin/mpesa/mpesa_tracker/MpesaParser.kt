@@ -42,7 +42,8 @@ object MpesaParser {
             "you have received",
             "have received",
             "transferred from m-shwari",
-            "transferred from kcb m-pesa"
+            "transferred from kcb m-pesa",
+            "give ksh"
         )
         val isIn = inKeywords.any { body.contains(it, ignoreCase = true) }
         return isMpesa && isIn
@@ -140,6 +141,15 @@ object MpesaParser {
 
         } else {
             when {
+                // Cash deposit at agent
+                clean.contains("give ksh", ignoreCase = true) -> {
+                    recipient = Regex(
+                        "cash to\\s+([A-Za-z ]+)",
+                        RegexOption.IGNORE_CASE
+                    ).find(clean)?.groupValues?.get(1)?.trim() ?: "Agent"
+                    messageType = "cash_deposit"
+                }
+
                 // To M-Shwari
                 clean.contains("transferred to M-Shwari", ignoreCase = true) -> {
                     recipient = "M-Shwari"
