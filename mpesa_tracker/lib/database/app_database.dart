@@ -31,8 +31,9 @@ class Accounts extends Table {
   TextColumn get name => text()();
   // group: mpesa | bank | mobile_savings | investment
   TextColumn get group => text()();
+  // zone: 1 (operating) | 2 (reserves) | 3 (committed) | 4 (invested)
+  IntColumn get zone => integer().withDefault(const Constant(1))();
   RealColumn get openingBalance => real().withDefault(const Constant(0.0))();
-  // Last manual correction amount and when it was set
   RealColumn get manualBalance => real().nullable()();
   DateTimeColumn get manualBalanceSetAt => dateTime().nullable()();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
@@ -44,7 +45,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -58,28 +59,56 @@ class AppDatabase extends _$AppDatabase {
         await m.createTable(accounts);
         await _seedAccounts();
       }
+      if (from < 3) {
+        await m.addColumn(accounts, accounts.zone);
+        await _assignDefaultZones();
+      }
     },
   );
+
+  // Assign zones to existing accounts based on their name
+  Future<void> _assignDefaultZones() async {
+    final zoneMap = {
+      'M-Pesa': 1,
+      'Other M-Pesa': 1,
+      'M-Shwari': 2,
+      'KCB M-Pesa': 2,
+      'M-Shwari Lock': 3,
+      'KCB M-Pesa Lock': 3,
+      'NCBA': 3,
+      'KCB Bank': 3,
+      'Etica': 4,
+      'Company': 4,
+    };
+
+    final all = await select(accounts).get();
+    for (final a in all) {
+      final z = zoneMap[a.name] ?? 1;
+      await (update(accounts)..where((acc) => acc.id.equals(a.id)))
+        .write(AccountsCompanion(zone: Value(z)));
+    }
+  }
 
   // ── Seed default accounts ───────────────────────────────────────────
   Future<void> _seedAccounts() async {
     final defaults = [
-      ('M-Pesa',          'mpesa'),
-      ('Other M-Pesa', 'mpesa'),
-      ('NCBA',            'bank'),
-      ('KCB Bank',        'bank'),
-      ('M-Shwari',        'mobile_savings'),
-      ('M-Shwari Lock',   'mobile_savings'),
-      ('KCB M-Pesa',      'mobile_savings'),
-      ('KCB M-Pesa Lock', 'mobile_savings'),
-      ('Etica',           'investment'),
-      ('Company',         'investment'),
+      ('M-Pesa',          'mpesa',          1),
+      ('Other M-Pesa',    'mpesa',          1),
+      ('M-Shwari',        'mobile_savings', 2),
+      ('KCB M-Pesa',      'mobile_savings', 2),
+      ('M-Shwari Lock',   'mobile_savings', 3),
+      ('KCB M-Pesa Lock', 'mobile_savings', 3),
+      ('NCBA',            'bank',           3),
+      ('KCB Bank',        'bank',           3),
+      ('Etica',           'investment',     4),
+      ('Company',         'investment',     4),
     ];
 
-    for (final (name, group) in defaults) {
+    for (final (name, group, zone) in defaults) {
       await into(accounts).insert(AccountsCompanion(
         name: Value(name),
         group: Value(group),
+        zone: Value(zone),
         openingBalance: const Value(0.0),
         isActive: const Value(true),
         createdAt: Value(DateTime.now()),
@@ -131,6 +160,16 @@ class AppDatabase extends _$AppDatabase {
         ..where((a) => a.isActive.equals(true))
         ..orderBy([(a) => OrderingTerm.asc(a.id)]))
       .get();
+  
+  Future<List<Account>> getAccountsByZone(int zone) =>
+    (select(accounts)
+      ..where((a) => a.zone.equals(zone) & a.isActive.equals(true))
+      ..orderBy([(a) => OrderingTerm.asc(a.id)]))
+    .get();
+
+  Future<void> updateAccountZone(int id, int zone) =>
+      (update(accounts)..where((a) => a.id.equals(id)))
+      .write(AccountsCompanion(zone: Value(zone)));
 
   Future<Account?> getAccountByName(String name) =>
       (select(accounts)..where((a) => a.name.equals(name)))

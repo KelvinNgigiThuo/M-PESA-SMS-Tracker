@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'database/app_database.dart';
 import 'overlay_channel.dart';
 import 'main.dart';
+import 'widgets/money_text.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -265,7 +266,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(
+              MoneyText(
                 '$prefix Ksh ${t.amount.toInt()}',
                 style: TextStyle(
                     fontSize: 13,

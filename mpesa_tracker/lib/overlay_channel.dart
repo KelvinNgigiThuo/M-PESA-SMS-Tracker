@@ -84,6 +84,7 @@ class _TagCardState extends State<_TagCard> {
   final _noteController = TextEditingController();
   List<Transaction> _receivables = [];
   bool _loadingReceivables = false;
+  bool _showSuccess = false;
 
   @override
   void dispose() {
@@ -105,24 +106,65 @@ class _TagCardState extends State<_TagCard> {
         16, 12, 16,
         MediaQuery.of(context).viewInsets.bottom + 24,
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Handle
-          Container(
-            width: 36,
-            height: 3,
-            decoration: BoxDecoration(
-              color: _white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(height: 14),
-          _buildScreen(),
-        ],
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 200),
+        transitionBuilder: (child, animation) =>
+            FadeTransition(opacity: animation, child: child),
+        child: _showSuccess ? _buildSuccessState() : _buildNormalState(),
       ),
     );
   }
+
+  Widget _buildNormalState() {
+    return Column(
+      key: const ValueKey('normal'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 36,
+          height: 3,
+          decoration: BoxDecoration(
+            color: _white.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(height: 14),
+        _buildScreen(),
+      ],
+    );
+  }
+
+  Widget _buildSuccessState() {
+  return SizedBox(
+    key: const ValueKey('success'),
+    width: double.infinity,
+    height: 140,
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Container(
+          width: 52,
+          height: 52,
+          decoration: BoxDecoration(
+            color: _gold.withOpacity(0.15),
+            shape: BoxShape.circle,
+            border: Border.all(color: _gold, width: 1.5),
+          ),
+          child: const Icon(Icons.check, color: _gold, size: 26),
+        ),
+        const SizedBox(height: 12),
+        const Text(
+          'Saved',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: _white,
+          ),
+        ),
+      ],
+    ),
+  );
+}
 
   Widget _buildScreen() {
     switch (_screen) {
@@ -827,6 +869,13 @@ class _TagCardState extends State<_TagCard> {
     }
   }
 
+  Future<void> _completeAndClose() async {
+    if (!mounted) return;
+    setState(() => _showSuccess = true);
+    await Future.delayed(const Duration(milliseconds: 600));
+    if (mounted) Navigator.pop(context);
+  }
+
   // ── Save methods ──────────────────────────────────────────────────
   Future<void> _saveTransfer(String bucketName) async {
     await _upsert(TransactionsCompanion(
@@ -842,7 +891,7 @@ class _TagCardState extends State<_TagCard> {
       createdAt: drift.Value(DateTime.now()),
       isTagged: drift.Value(true),
     ));
-    if (mounted) Navigator.pop(context);
+    await _completeAndClose();
   }
 
   Future<void> _saveCustodySpend() async {
@@ -861,7 +910,7 @@ class _TagCardState extends State<_TagCard> {
       createdAt: drift.Value(DateTime.now()),
       isTagged: drift.Value(true),
     ));
-    if (mounted) Navigator.pop(context);
+    await _completeAndClose();
   }
 
   Future<void> _saveReimbursable() async {
@@ -880,7 +929,7 @@ class _TagCardState extends State<_TagCard> {
       createdAt: drift.Value(DateTime.now()),
       isTagged: drift.Value(true),
     ));
-    if (mounted) Navigator.pop(context);
+    await _completeAndClose();
   }
 
   Future<void> _saveExpense() async {
@@ -896,7 +945,7 @@ class _TagCardState extends State<_TagCard> {
       createdAt: drift.Value(DateTime.now()),
       isTagged: drift.Value(true),
     ));
-    if (mounted) Navigator.pop(context);
+    await _completeAndClose();
   }
 
   Future<void> _saveCustodyReceive() async {
@@ -915,7 +964,7 @@ class _TagCardState extends State<_TagCard> {
       createdAt: drift.Value(DateTime.now()),
       isTagged: drift.Value(true),
     ));
-    if (mounted) Navigator.pop(context);
+    await _completeAndClose();
   }
 
   Future<void> _saveReceivableMatch(Transaction receivable) async {
@@ -949,7 +998,7 @@ class _TagCardState extends State<_TagCard> {
         isTagged: drift.Value(true),
       ));
     }
-    if (mounted) Navigator.pop(context);
+    await _completeAndClose();
   }
 
   Future<void> _saveIncome() async {
@@ -964,7 +1013,7 @@ class _TagCardState extends State<_TagCard> {
       createdAt: drift.Value(DateTime.now()),
       isTagged: drift.Value(true),
     ));
-    if (mounted) Navigator.pop(context);
+    await _completeAndClose();
   }
 
   Future<void> _saveUntagged() async {
@@ -992,6 +1041,6 @@ class _TagCardState extends State<_TagCard> {
       createdAt: drift.Value(DateTime.now()),
       isTagged: drift.Value(false),
     ));
-    if (mounted) Navigator.pop(context);
+    await _completeAndClose();
   }
 }

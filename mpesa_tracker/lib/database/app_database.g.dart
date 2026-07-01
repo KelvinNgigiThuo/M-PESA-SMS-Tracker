@@ -881,6 +881,16 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _zoneMeta = const VerificationMeta('zone');
+  @override
+  late final GeneratedColumn<int> zone = GeneratedColumn<int>(
+    'zone',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
   static const VerificationMeta _openingBalanceMeta = const VerificationMeta(
     'openingBalance',
   );
@@ -946,6 +956,7 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
     id,
     name,
     group,
+    zone,
     openingBalance,
     manualBalance,
     manualBalanceSetAt,
@@ -982,6 +993,12 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
       );
     } else if (isInserting) {
       context.missing(_groupMeta);
+    }
+    if (data.containsKey('zone')) {
+      context.handle(
+        _zoneMeta,
+        zone.isAcceptableOrUnknown(data['zone']!, _zoneMeta),
+      );
     }
     if (data.containsKey('opening_balance')) {
       context.handle(
@@ -1045,6 +1062,10 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
         DriftSqlType.string,
         data['${effectivePrefix}group'],
       )!,
+      zone: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}zone'],
+      )!,
       openingBalance: attachedDatabase.typeMapping.read(
         DriftSqlType.double,
         data['${effectivePrefix}opening_balance'],
@@ -1078,6 +1099,7 @@ class Account extends DataClass implements Insertable<Account> {
   final int id;
   final String name;
   final String group;
+  final int zone;
   final double openingBalance;
   final double? manualBalance;
   final DateTime? manualBalanceSetAt;
@@ -1087,6 +1109,7 @@ class Account extends DataClass implements Insertable<Account> {
     required this.id,
     required this.name,
     required this.group,
+    required this.zone,
     required this.openingBalance,
     this.manualBalance,
     this.manualBalanceSetAt,
@@ -1099,6 +1122,7 @@ class Account extends DataClass implements Insertable<Account> {
     map['id'] = Variable<int>(id);
     map['name'] = Variable<String>(name);
     map['group'] = Variable<String>(group);
+    map['zone'] = Variable<int>(zone);
     map['opening_balance'] = Variable<double>(openingBalance);
     if (!nullToAbsent || manualBalance != null) {
       map['manual_balance'] = Variable<double>(manualBalance);
@@ -1116,6 +1140,7 @@ class Account extends DataClass implements Insertable<Account> {
       id: Value(id),
       name: Value(name),
       group: Value(group),
+      zone: Value(zone),
       openingBalance: Value(openingBalance),
       manualBalance: manualBalance == null && nullToAbsent
           ? const Value.absent()
@@ -1137,6 +1162,7 @@ class Account extends DataClass implements Insertable<Account> {
       id: serializer.fromJson<int>(json['id']),
       name: serializer.fromJson<String>(json['name']),
       group: serializer.fromJson<String>(json['group']),
+      zone: serializer.fromJson<int>(json['zone']),
       openingBalance: serializer.fromJson<double>(json['openingBalance']),
       manualBalance: serializer.fromJson<double?>(json['manualBalance']),
       manualBalanceSetAt: serializer.fromJson<DateTime?>(
@@ -1153,6 +1179,7 @@ class Account extends DataClass implements Insertable<Account> {
       'id': serializer.toJson<int>(id),
       'name': serializer.toJson<String>(name),
       'group': serializer.toJson<String>(group),
+      'zone': serializer.toJson<int>(zone),
       'openingBalance': serializer.toJson<double>(openingBalance),
       'manualBalance': serializer.toJson<double?>(manualBalance),
       'manualBalanceSetAt': serializer.toJson<DateTime?>(manualBalanceSetAt),
@@ -1165,6 +1192,7 @@ class Account extends DataClass implements Insertable<Account> {
     int? id,
     String? name,
     String? group,
+    int? zone,
     double? openingBalance,
     Value<double?> manualBalance = const Value.absent(),
     Value<DateTime?> manualBalanceSetAt = const Value.absent(),
@@ -1174,6 +1202,7 @@ class Account extends DataClass implements Insertable<Account> {
     id: id ?? this.id,
     name: name ?? this.name,
     group: group ?? this.group,
+    zone: zone ?? this.zone,
     openingBalance: openingBalance ?? this.openingBalance,
     manualBalance: manualBalance.present
         ? manualBalance.value
@@ -1189,6 +1218,7 @@ class Account extends DataClass implements Insertable<Account> {
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
       group: data.group.present ? data.group.value : this.group,
+      zone: data.zone.present ? data.zone.value : this.zone,
       openingBalance: data.openingBalance.present
           ? data.openingBalance.value
           : this.openingBalance,
@@ -1209,6 +1239,7 @@ class Account extends DataClass implements Insertable<Account> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('group: $group, ')
+          ..write('zone: $zone, ')
           ..write('openingBalance: $openingBalance, ')
           ..write('manualBalance: $manualBalance, ')
           ..write('manualBalanceSetAt: $manualBalanceSetAt, ')
@@ -1223,6 +1254,7 @@ class Account extends DataClass implements Insertable<Account> {
     id,
     name,
     group,
+    zone,
     openingBalance,
     manualBalance,
     manualBalanceSetAt,
@@ -1236,6 +1268,7 @@ class Account extends DataClass implements Insertable<Account> {
           other.id == this.id &&
           other.name == this.name &&
           other.group == this.group &&
+          other.zone == this.zone &&
           other.openingBalance == this.openingBalance &&
           other.manualBalance == this.manualBalance &&
           other.manualBalanceSetAt == this.manualBalanceSetAt &&
@@ -1247,6 +1280,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
   final Value<int> id;
   final Value<String> name;
   final Value<String> group;
+  final Value<int> zone;
   final Value<double> openingBalance;
   final Value<double?> manualBalance;
   final Value<DateTime?> manualBalanceSetAt;
@@ -1256,6 +1290,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     this.id = const Value.absent(),
     this.name = const Value.absent(),
     this.group = const Value.absent(),
+    this.zone = const Value.absent(),
     this.openingBalance = const Value.absent(),
     this.manualBalance = const Value.absent(),
     this.manualBalanceSetAt = const Value.absent(),
@@ -1266,6 +1301,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     this.id = const Value.absent(),
     required String name,
     required String group,
+    this.zone = const Value.absent(),
     this.openingBalance = const Value.absent(),
     this.manualBalance = const Value.absent(),
     this.manualBalanceSetAt = const Value.absent(),
@@ -1278,6 +1314,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     Expression<int>? id,
     Expression<String>? name,
     Expression<String>? group,
+    Expression<int>? zone,
     Expression<double>? openingBalance,
     Expression<double>? manualBalance,
     Expression<DateTime>? manualBalanceSetAt,
@@ -1288,6 +1325,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
       if (id != null) 'id': id,
       if (name != null) 'name': name,
       if (group != null) 'group': group,
+      if (zone != null) 'zone': zone,
       if (openingBalance != null) 'opening_balance': openingBalance,
       if (manualBalance != null) 'manual_balance': manualBalance,
       if (manualBalanceSetAt != null)
@@ -1301,6 +1339,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     Value<int>? id,
     Value<String>? name,
     Value<String>? group,
+    Value<int>? zone,
     Value<double>? openingBalance,
     Value<double?>? manualBalance,
     Value<DateTime?>? manualBalanceSetAt,
@@ -1311,6 +1350,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
       id: id ?? this.id,
       name: name ?? this.name,
       group: group ?? this.group,
+      zone: zone ?? this.zone,
       openingBalance: openingBalance ?? this.openingBalance,
       manualBalance: manualBalance ?? this.manualBalance,
       manualBalanceSetAt: manualBalanceSetAt ?? this.manualBalanceSetAt,
@@ -1330,6 +1370,9 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     }
     if (group.present) {
       map['group'] = Variable<String>(group.value);
+    }
+    if (zone.present) {
+      map['zone'] = Variable<int>(zone.value);
     }
     if (openingBalance.present) {
       map['opening_balance'] = Variable<double>(openingBalance.value);
@@ -1357,6 +1400,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('group: $group, ')
+          ..write('zone: $zone, ')
           ..write('openingBalance: $openingBalance, ')
           ..write('manualBalance: $manualBalance, ')
           ..write('manualBalanceSetAt: $manualBalanceSetAt, ')
@@ -1774,6 +1818,7 @@ typedef $$AccountsTableCreateCompanionBuilder =
       Value<int> id,
       required String name,
       required String group,
+      Value<int> zone,
       Value<double> openingBalance,
       Value<double?> manualBalance,
       Value<DateTime?> manualBalanceSetAt,
@@ -1785,6 +1830,7 @@ typedef $$AccountsTableUpdateCompanionBuilder =
       Value<int> id,
       Value<String> name,
       Value<String> group,
+      Value<int> zone,
       Value<double> openingBalance,
       Value<double?> manualBalance,
       Value<DateTime?> manualBalanceSetAt,
@@ -1813,6 +1859,11 @@ class $$AccountsTableFilterComposer
 
   ColumnFilters<String> get group => $composableBuilder(
     column: $table.group,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get zone => $composableBuilder(
+    column: $table.zone,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -1866,6 +1917,11 @@ class $$AccountsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get zone => $composableBuilder(
+    column: $table.zone,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<double> get openingBalance => $composableBuilder(
     column: $table.openingBalance,
     builder: (column) => ColumnOrderings(column),
@@ -1909,6 +1965,9 @@ class $$AccountsTableAnnotationComposer
 
   GeneratedColumn<String> get group =>
       $composableBuilder(column: $table.group, builder: (column) => column);
+
+  GeneratedColumn<int> get zone =>
+      $composableBuilder(column: $table.zone, builder: (column) => column);
 
   GeneratedColumn<double> get openingBalance => $composableBuilder(
     column: $table.openingBalance,
@@ -1963,6 +2022,7 @@ class $$AccountsTableTableManager
                 Value<int> id = const Value.absent(),
                 Value<String> name = const Value.absent(),
                 Value<String> group = const Value.absent(),
+                Value<int> zone = const Value.absent(),
                 Value<double> openingBalance = const Value.absent(),
                 Value<double?> manualBalance = const Value.absent(),
                 Value<DateTime?> manualBalanceSetAt = const Value.absent(),
@@ -1972,6 +2032,7 @@ class $$AccountsTableTableManager
                 id: id,
                 name: name,
                 group: group,
+                zone: zone,
                 openingBalance: openingBalance,
                 manualBalance: manualBalance,
                 manualBalanceSetAt: manualBalanceSetAt,
@@ -1983,6 +2044,7 @@ class $$AccountsTableTableManager
                 Value<int> id = const Value.absent(),
                 required String name,
                 required String group,
+                Value<int> zone = const Value.absent(),
                 Value<double> openingBalance = const Value.absent(),
                 Value<double?> manualBalance = const Value.absent(),
                 Value<DateTime?> manualBalanceSetAt = const Value.absent(),
@@ -1992,6 +2054,7 @@ class $$AccountsTableTableManager
                 id: id,
                 name: name,
                 group: group,
+                zone: zone,
                 openingBalance: openingBalance,
                 manualBalance: manualBalance,
                 manualBalanceSetAt: manualBalanceSetAt,

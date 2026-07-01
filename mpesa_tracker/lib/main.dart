@@ -8,6 +8,7 @@ import 'main_shell.dart';
 import 'services/setup_service.dart';
 
 final AppDatabase db = AppDatabase();
+final ValueNotifier<bool> isPrivacyMode = ValueNotifier(false);
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'database/app_database.dart';
 import 'overlay_channel.dart';
 import 'main.dart';
+import 'widgets/money_text.dart';
 
 const _green = Color(0xFF1A3C34);
 const _gold = Color(0xFFC9A84C);
@@ -28,6 +29,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   double _custodyHeld = 0;
   double _openReceivablesTotal = 0;
   double _bucketTotal = 0;
+  double _receivedThisMonth = 0;
+  double _sentThisMonth = 0;
+  double _receivedLastMonth = 0;
 
   bool _loading = true;
 
@@ -68,6 +72,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
     double custody = 0;
     double receivables = 0;
     final Map<String, double> poolMap = {};
+
+    // Income momentum — current month vs last month
+    final now = DateTime.now();
+    final startOfThisMonth = DateTime(now.year, now.month, 1);
+    final startOfLastMonth = DateTime(now.year, now.month - 1, 1);
+
+    double receivedThisMonth = 0;
+    double sentThisMonth = 0;
+    double receivedLastMonth = 0;
+
+    for (final t in all) {
+      // True income only — not transfers, not custody, not receivable clears
+      if (t.type == 'income' && t.createdAt.isAfter(startOfThisMonth)) {
+        receivedThisMonth += t.amount;
+      }
+      if (t.type == 'income' &&
+          t.createdAt.isAfter(startOfLastMonth) &&
+          t.createdAt.isBefore(startOfThisMonth)) {
+        receivedLastMonth += t.amount;
+      }
+      // True expenses + fees — real cost of living
+      if ((t.type == 'expense' || t.type == 'fee') &&
+          t.createdAt.isAfter(startOfThisMonth)) {
+        sentThisMonth += t.amount;
+      }
+    }
 
     for (final t in all) {
       if (t.balanceAfter > 0) {
@@ -122,12 +152,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _custodyPools = openPools;
       _openReceivables = openReceivables;
       _recent = recent;
+      _receivedThisMonth = receivedThisMonth;
+      _sentThisMonth = sentThisMonth;
+      _receivedLastMonth = receivedLastMonth;
       _loading = false;
     });
   }
 
   double get _trueNetWorth =>
-      _mpesaBalance + _bucketTotal - _custodyHeld + _openReceivablesTotal;
+    _mpesaBalance + _bucketTotal - _custodyHeld + _openReceivablesTotal;
+
+  double get _netFlow => _receivedThisMonth - _sentThisMonth;
+
+  double get _momentumPercent {
+    if (_receivedLastMonth == 0) return 0;
+    return ((_receivedThisMonth - _receivedLastMonth) / _receivedLastMonth) * 100;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -144,7 +184,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   SliverToBoxAdapter(child: _buildTopSection()),
                   // ── Body ─────────────────────────────────────────
                   SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
                     sliver: SliverList(
                       delegate: SliverChildListDelegate([
                         if (_openReceivables.isNotEmpty) ...[
@@ -177,68 +217,134 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // ── Top section ───────────────────────────────────────────────────
   Widget _buildTopSection() {
-    return Container(
-      color: _green,
-      padding: const EdgeInsets.fromLTRB(20, 56, 20, 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // App label + refresh
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'M-PESA TRACKER',
-                style: TextStyle(
-                  fontSize: 9,
-                  color: _gold.withOpacity(0.6),
-                  letterSpacing: 2,
-                  fontWeight: FontWeight.w600,
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      // Dark header — shorter now, stats moved out
+      Container(
+        color: _green,
+        padding: const EdgeInsets.fromLTRB(20, 56, 20, 36),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'M-PESA TRACKER',
+                  style: TextStyle(
+                    fontSize: 9,
+                    color: _gold.withOpacity(0.6),
+                    letterSpacing: 2,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
-              GestureDetector(
-                onTap: _load,
-                child: Icon(Icons.refresh,
-                    color: _gold.withOpacity(0.5), size: 16),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          // Net worth label
-          Text(
-            'True Net Worth',
-            style: TextStyle(
-                fontSize: 12, color: Colors.white.withOpacity(0.45)),
-          ),
-          const SizedBox(height: 4),
-          // Big number
-          Text(
-            'Ksh ${_trueNetWorth.toStringAsFixed(2)}',
-            style: const TextStyle(
-              fontSize: 34,
-              fontWeight: FontWeight.w700,
-              color: _gold,
-              letterSpacing: -1,
+                Row(
+                  children: [
+                    ValueListenableBuilder<bool>(
+                      valueListenable: isPrivacyMode,
+                      builder: (context, hidden, _) {
+                        return GestureDetector(
+                          onTap: () => isPrivacyMode.value = !hidden,
+                          child: Padding(
+                            padding: const EdgeInsets.only(right: 14),
+                            child: Icon(
+                              hidden ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                              color: _gold.withOpacity(0.5),
+                              size: 16,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    GestureDetector(
+                      onTap: _load,
+                      child: Icon(Icons.refresh,
+                          color: _gold.withOpacity(0.5), size: 16),
+                    ),
+                  ],
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'M-Pesa + accounts − holding + owed to me',
-            style: TextStyle(
-                fontSize: 10, color: Colors.white.withOpacity(0.3)),
-          ),
-          const SizedBox(height: 16),
-          // Inline stat row
-          Container(
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: _momentumColumn('Received', _receivedThisMonth,
+                      alignLeft: true),
+                ),
+                Container(
+                  width: 0.5,
+                  height: 36,
+                  color: Colors.white.withOpacity(0.1),
+                ),
+                Expanded(
+                  child: _momentumColumn('Sent', _sentThisMonth,
+                      alignLeft: false),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+              Row(
+                children: [
+                  Text(
+                    'Net flow  ',
+                    style: TextStyle(
+                        fontSize: 12, color: Colors.white.withOpacity(0.5)),
+                  ),
+                  MoneyText(
+                    '${_netFlow >= 0 ? "+" : ""}Ksh ${_netFlow.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: _netFlow >= 0 ? _gold : Colors.red[300],
+                    ),
+                  ),
+                  if (_receivedLastMonth > 0) ...[
+                    const SizedBox(width: 8),
+                    Icon(
+                      _momentumPercent >= 0
+                          ? Icons.trending_up
+                          : Icons.trending_down,
+                      size: 13,
+                      color: _momentumPercent >= 0
+                          ? _gold.withOpacity(0.8)
+                          : Colors.red[200],
+                    ),
+                    const SizedBox(width: 2),
+                    Text(
+                      '${_momentumPercent.abs().toStringAsFixed(0)}% vs last month',
+                      style: TextStyle(
+                          fontSize: 10, color: Colors.white.withOpacity(0.4)),
+                    ),
+                  ],
+                ],
+              ),
+          ],
+        ),
+      ),
+      // Floating stat card — bridges header and body
+      Transform.translate(
+        offset: const Offset(0, -22),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Container(
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(12),
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.06),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
             child: Row(
               children: [
                 _statCell('M-Pesa',
                     'Ksh ${_mpesaBalance.toStringAsFixed(2)}',
-                    Colors.white),
+                    _green),
                 _statDivider(),
                 _statCell('Holding',
                     'Ksh ${_custodyHeld.toStringAsFixed(2)}',
@@ -250,27 +356,52 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
           ),
-        ],
+        ),
       ),
+    ],
+  );
+}
+
+  Widget _momentumColumn(String label, double value,
+      {required bool alignLeft}) {
+    return Column(
+      crossAxisAlignment:
+          alignLeft ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+              fontSize: 11, color: Colors.white.withOpacity(0.4)),
+        ),
+        const SizedBox(height: 4),
+        MoneyText(
+          'Ksh ${value.toStringAsFixed(2)}',
+          style: const TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.w700,
+            color: _gold,
+            letterSpacing: -0.5,
+          ),
+        ),
+      ],
     );
   }
-
+  
   Widget _statCell(String label, String value, Color valueColor) {
     return Expanded(
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
+        padding: const EdgeInsets.symmetric(vertical: 14),
         child: Column(
           children: [
-            Text(value,
-                style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: valueColor)),
+            MoneyText(value,
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: valueColor)),
             const SizedBox(height: 3),
             Text(label,
                 style: TextStyle(
-                    fontSize: 9,
-                    color: Colors.white.withOpacity(0.35))),
+                    fontSize: 9, color: Colors.grey[400])),
           ],
         ),
       ),
@@ -280,8 +411,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _statDivider() {
     return Container(
       width: 0.5,
-      height: 28,
-      color: Colors.white.withOpacity(0.08),
+      height: 30,
+      color: Colors.grey[200],
     );
   }
 

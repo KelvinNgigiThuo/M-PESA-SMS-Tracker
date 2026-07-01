@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'database/app_database.dart';
 import 'main.dart';
+import 'widgets/money_text.dart';
+
+const _green = Color(0xFF1A3C34);
+const _gold = Color(0xFFC9A84C);
 
 class AccountsScreen extends StatefulWidget {
   const AccountsScreen({super.key});
@@ -16,6 +20,13 @@ class _AccountsScreenState extends State<AccountsScreen> {
   double _mpesaLiveBalance = 0;
   bool _loading = true;
 
+  static const _zoneInfo = {
+    1: {'label': 'Operating', 'subtitle': 'Available right now', 'icon': Icons.bolt_outlined},
+    2: {'label': 'Reserves', 'subtitle': 'Accessible same-day', 'icon': Icons.shield_outlined},
+    3: {'label': 'Committed', 'subtitle': 'Locked or tied up', 'icon': Icons.lock_outline},
+    4: {'label': 'Invested', 'subtitle': 'Long-term growth', 'icon': Icons.trending_up},
+  };
+
   @override
   void initState() {
     super.initState();
@@ -23,33 +34,29 @@ class _AccountsScreenState extends State<AccountsScreen> {
   }
 
   Future<void> _load() async {
-  final accounts = await db.getAllAccounts();
-  final bucketBalances = await db.getBucketBalances();
-  final all = await db.watchAll().first;
+    final accounts = await db.getAllAccounts();
+    final bucketBalances = await db.getBucketBalances();
+    final all = await db.watchAll().first;
 
-  // Get latest M-Pesa balance from SMS
-  double mpesaBalance = 0;
-  DateTime? lastBalanceTime;
-  for (final t in all) {
-    if (t.balanceAfter > 0) {
-      if (lastBalanceTime == null ||
-          t.createdAt.isAfter(lastBalanceTime)) {
-        mpesaBalance = t.balanceAfter;
-        lastBalanceTime = t.createdAt;
+    double mpesaBalance = 0;
+    DateTime? lastBalanceTime;
+    for (final t in all) {
+      if (t.balanceAfter > 0) {
+        if (lastBalanceTime == null || t.createdAt.isAfter(lastBalanceTime)) {
+          mpesaBalance = t.balanceAfter;
+          lastBalanceTime = t.createdAt;
+        }
       }
     }
+
+    setState(() {
+      _accounts = accounts;
+      _bucketBalances = bucketBalances;
+      _mpesaLiveBalance = mpesaBalance;
+      _loading = false;
+    });
   }
 
-
-  setState(() {
-    _accounts = accounts;
-    _bucketBalances = bucketBalances;
-    _mpesaLiveBalance = mpesaBalance;
-    _loading = false;
-  });
-}
-
-  // Compute live balance for an account
   double _balanceFor(Account a) {
     if (a.name == 'M-Pesa') {
       return _mpesaLiveBalance > 0 ? _mpesaLiveBalance : a.openingBalance;
@@ -57,119 +64,144 @@ class _AccountsScreenState extends State<AccountsScreen> {
     if (a.manualBalance != null) {
       return a.manualBalance!;
     }
-    // No manual balance — compute from opening balance + tagged movements
     final movements = _bucketBalances[a.name] ?? 0.0;
     return a.openingBalance + movements;
   }
 
-  String _groupLabel(String group) {
-    switch (group) {
-      case 'mpesa':          return 'M-Pesa';
-      case 'bank':           return 'Bank Accounts';
-      case 'mobile_savings': return 'Mobile Savings';
-      case 'investment':     return 'Investments';
-      default:               return group;
-    }
+  double _zoneTotal(int zone) {
+    return _accounts
+        .where((a) => a.zone == zone)
+        .fold(0.0, (sum, a) => sum + _balanceFor(a));
   }
 
-  IconData _groupIcon(String group) {
-    switch (group) {
-      case 'mpesa':          return Icons.phone_android;
-      case 'bank':           return Icons.account_balance;
-      case 'mobile_savings': return Icons.savings;
-      case 'investment':     return Icons.trending_up;
-      default:               return Icons.wallet;
+  double get _trueNetWorth {
+    double total = 0;
+    for (var z = 1; z <= 4; z++) {
+      total += _zoneTotal(z);
     }
+    return total;
   }
 
   @override
   Widget build(BuildContext context) {
-    final grouped = <String, List<Account>>{};
+    final grouped = <int, List<Account>>{};
     for (final a in _accounts) {
-      grouped.putIfAbsent(a.group, () => []).add(a);
+      grouped.putIfAbsent(a.zone, () => []).add(a);
     }
 
-    final groupOrder = ['mpesa', 'bank', 'mobile_savings', 'investment'];
-
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F6FA),
-      appBar: AppBar(
-        title: const Text('Accounts'),
-        backgroundColor: const Color(0xFF1A73E8),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _load,
-          ),
-        ],
-      ),
+      backgroundColor: const Color(0xFFF2F5F3),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: _gold))
           : RefreshIndicator(
+              color: _gold,
               onRefresh: _load,
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  for (final group in groupOrder)
-                    if (grouped.containsKey(group)) ...[
-                      Padding(
-                        padding: const EdgeInsets.only(top: 16, bottom: 8),
-                        child: Row(
-                          children: [
-                            Icon(_groupIcon(group),
-                                size: 14, color: Colors.grey[500]),
-                            const SizedBox(width: 6),
-                            Text(
-                              _groupLabel(group),
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.grey[500],
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      for (final account in grouped[group]!)
-                        _buildAccountCard(account),
-                    ],
-                  const SizedBox(height: 24),
-                  // Add new account button
-                  GestureDetector(
-                    onTap: () => _showAddAccount(),
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                            color: const Color(0xFF1A73E8),
-                            style: BorderStyle.solid),
-                      ),
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.add, color: Color(0xFF1A73E8), size: 18),
-                          SizedBox(width: 8),
-                          Text(
-                            'Add new account',
-                            style: TextStyle(
-                                color: Color(0xFF1A73E8),
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500),
-                          ),
-                        ],
-                      ),
+              child: CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(child: _buildHeader()),
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+                    sliver: SliverList(
+                      delegate: SliverChildListDelegate([
+                        for (var zone = 1; zone <= 4; zone++)
+                          if (grouped.containsKey(zone))
+                            _buildZoneSection(zone, grouped[zone]!),
+                        const SizedBox(height: 16),
+                        _buildAddAccountButton(),
+                        const SizedBox(height: 16),
+                      ]),
                     ),
                   ),
-                  const SizedBox(height: 16),
                 ],
               ),
             ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Container(
+      decoration: BoxDecoration(
+        color: _green,
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(28),
+          bottomRight: Radius.circular(28),
+        ),
+      ),
+      padding: const EdgeInsets.fromLTRB(20, 56, 20, 28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'MY MONEY',
+            style: TextStyle(
+              fontSize: 9,
+              color: _gold.withOpacity(0.6),
+              letterSpacing: 2,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'True Net Worth',
+            style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.45)),
+          ),
+          const SizedBox(height: 4),
+          MoneyText(
+            'Ksh ${_trueNetWorth.toStringAsFixed(2)}',
+            style: const TextStyle(
+              fontSize: 30,
+              fontWeight: FontWeight.w700,
+              color: _gold,
+              letterSpacing: -1,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildZoneSection(int zone, List<Account> accounts) {
+    final info = _zoneInfo[zone]!;
+    final total = _zoneTotal(zone);
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(info['icon'] as IconData, size: 14, color: Colors.grey[500]),
+              const SizedBox(width: 6),
+              Text(
+                (info['label'] as String).toUpperCase(),
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[500],
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '· ${info['subtitle']}',
+                style: TextStyle(fontSize: 10, color: Colors.grey[400]),
+              ),
+              const Spacer(),
+              MoneyText(
+                'Ksh ${total.toStringAsFixed(2)}',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[700],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          for (final account in accounts) _buildAccountCard(account),
+        ],
+      ),
     );
   }
 
@@ -180,12 +212,11 @@ class _AccountsScreenState extends State<AccountsScreen> {
     return GestureDetector(
       onTap: () => _showCorrectBalance(account),
       child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        margin: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey[200]!),
         ),
         child: Row(
           children: [
@@ -194,33 +225,17 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(account.name,
-                      style: const TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 2),
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                   Text(
-                    hasManual
-                        ? 'Manual correction set'
-                        : 'Opening balance + transfers',
-                    style: TextStyle(
-                        fontSize: 11, color: Colors.grey[400]),
+                    hasManual ? 'Manually corrected' : 'Tracked from transfers',
+                    style: TextStyle(fontSize: 10, color: Colors.grey[400]),
                   ),
                 ],
               ),
             ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  'Ksh ${balance.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Tap to correct',
-                  style: TextStyle(fontSize: 10, color: Colors.grey[400]),
-                ),
-              ],
+            MoneyText(
+              'Ksh ${balance.toStringAsFixed(2)}',
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
             ),
           ],
         ),
@@ -228,127 +243,126 @@ class _AccountsScreenState extends State<AccountsScreen> {
     );
   }
 
-  // ── Manual balance correction sheet ───────────────────────────────
-  void _showCorrectBalance(Account account) {
-  final controller = TextEditingController(
-    text: account.manualBalance != null
-        ? account.manualBalance!.toStringAsFixed(2)
-        : _balanceFor(account).toStringAsFixed(2),
-  );
-
-  showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (ctx) => Padding(
-      padding: EdgeInsets.only(
-          bottom: MediaQuery.of(ctx).viewInsets.bottom),
+  Widget _buildAddAccountButton() {
+    return GestureDetector(
+      onTap: _showAddAccount,
       child: Container(
-        margin: const EdgeInsets.all(12),
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
-          color: Theme.of(ctx).colorScheme.surface,
-          borderRadius: BorderRadius.circular(20),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _green.withOpacity(0.3), width: 0.5),
         ),
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              account.name,
-              style: const TextStyle(
-                  fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Set the actual current balance. The app will track movements from this point.',
-              style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                const Text('Ksh',
-                    style: TextStyle(fontSize: 14, color: Colors.grey)),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: controller,
-                    autofocus: true,
-                    keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true),
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(
-                          RegExp(r'[\d,.]')),
-                    ],
-                    decoration: const InputDecoration(
-                      hintText: '0.00',
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                    ),
-                    style: const TextStyle(
-                        fontSize: 20, fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            GestureDetector(
-              onTap: () async {
-                final value = double.tryParse(
-                        controller.text.trim().replaceAll(',', '')) ??
-                    0.0;
-                await db.setManualBalance(account.id, value);
-                if (mounted) {
-                  Navigator.pop(ctx);
-                  _load();
-                }
-              },
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1A73E8),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Text(
-                  'Save correction',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600),
-                ),
-              ),
-            ),
+            Icon(Icons.add, color: _green, size: 16),
+            const SizedBox(width: 8),
+            Text('Add new account',
+                style: TextStyle(color: _green, fontSize: 13, fontWeight: FontWeight.w500)),
           ],
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
-  // ── Add new account sheet ─────────────────────────────────────────
+  // ── Manual balance correction sheet ─────────────────────────────
+  void _showCorrectBalance(Account account) {
+    final controller = TextEditingController(
+      text: account.manualBalance != null
+          ? account.manualBalance!.toStringAsFixed(2)
+          : _balanceFor(account).toStringAsFixed(2),
+    );
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: Container(
+          margin: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: _green,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 3,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(account.name,
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white)),
+              const SizedBox(height: 4),
+              Text(
+                'Set the actual current balance.',
+                style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.5)),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Text('Ksh', style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.6))),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: controller,
+                      autofocus: true,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d,.]'))],
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: Colors.white),
+                      cursorColor: _gold,
+                      decoration: InputDecoration(
+                        hintText: '0.00',
+                        hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
+                        enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white.withOpacity(0.2))),
+                        focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: _gold)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              GestureDetector(
+                onTap: () async {
+                  final value = double.tryParse(controller.text.trim().replaceAll(',', '')) ?? 0.0;
+                  await db.setManualBalance(account.id, value);
+                  if (mounted) {
+                    Navigator.pop(ctx);
+                    _load();
+                  }
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  decoration: BoxDecoration(color: _gold, borderRadius: BorderRadius.circular(12)),
+                  child: Text('Save correction',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: _green, fontSize: 14, fontWeight: FontWeight.w600)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Add new account sheet ───────────────────────────────────────
   void _showAddAccount() {
     final nameController = TextEditingController();
-    String selectedGroup = 'bank';
-
-    final groups = [
-      {'value': 'mpesa', 'label': 'M-Pesa'},
-      {'value': 'bank', 'label': 'Bank'},
-      {'value': 'mobile_savings', 'label': 'Mobile Savings'},
-      {'value': 'investment', 'label': 'Investment'},
-    ];
+    int selectedZone = 1;
 
     showModalBottomSheet(
       context: context,
@@ -356,14 +370,10 @@ class _AccountsScreenState extends State<AccountsScreen> {
       backgroundColor: Colors.transparent,
       builder: (_) => StatefulBuilder(
         builder: (context, setModalState) => Padding(
-          padding: EdgeInsets.only(
-              bottom: MediaQuery.of(context).viewInsets.bottom),
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
           child: Container(
             margin: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(20),
-            ),
+            decoration: BoxDecoration(color: _green, borderRadius: BorderRadius.circular(20)),
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -372,48 +382,67 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 Center(
                   child: Container(
                     width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[300],
-                      borderRadius: BorderRadius.circular(2),
-                    ),
+                    height: 3,
+                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(2)),
                   ),
                 ),
                 const SizedBox(height: 16),
-                const Text('Add new account',
-                    style: TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w600)),
+                const Text('Add new account', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white)),
                 const SizedBox(height: 16),
                 TextField(
                   controller: nameController,
                   autofocus: true,
-                  decoration: const InputDecoration(
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
                     labelText: 'Account name',
+                    labelStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
                     hintText: 'e.g. CIC Money Market',
-                    border: OutlineInputBorder(),
-                    isDense: true,
+                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
+                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white.withOpacity(0.2))),
+                    focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: _gold)),
                   ),
                 ),
-                const SizedBox(height: 12),
-                // Group selector
+                const SizedBox(height: 16),
+                Text('Which zone?', style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.5))),
+                const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
-                  children: groups.map((g) {
-                    final isSelected = selectedGroup == g['value'];
-                    return ChoiceChip(
-                      label: Text(g['label']!),
-                      selected: isSelected,
-                      onSelected: (_) => setModalState(
-                          () => selectedGroup = g['value']!),
+                  runSpacing: 8,
+                  children: _zoneInfo.entries.map((e) {
+                    final selected = selectedZone == e.key;
+                    return GestureDetector(
+                      onTap: () => setModalState(() => selectedZone = e.key),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: selected ? _gold.withOpacity(0.15) : Colors.white.withOpacity(0.06),
+                          borderRadius: BorderRadius.circular(99),
+                          border: Border.all(
+                            color: selected ? _gold.withOpacity(0.6) : Colors.white.withOpacity(0.15),
+                            width: 0.5,
+                          ),
+                        ),
+                        child: Text(
+                          e.value['label'] as String,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: selected ? _gold : Colors.white.withOpacity(0.7),
+                            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                          ),
+                        ),
+                      ),
                     );
                   }).toList(),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
                 GestureDetector(
                   onTap: () async {
                     final name = nameController.text.trim();
                     if (name.isEmpty) return;
-                    await db.addCustomAccount(name, selectedGroup);
+                    await db.addCustomAccount(name, 'custom');
+                    final newAccounts = await db.getAllAccounts();
+                    final created = newAccounts.lastWhere((a) => a.name == name);
+                    await db.updateAccountZone(created.id, selectedZone);
                     if (mounted) {
                       Navigator.pop(context);
                       _load();
@@ -421,19 +450,11 @@ class _AccountsScreenState extends State<AccountsScreen> {
                   },
                   child: Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1A73E8),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Text(
-                      'Add account',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600),
-                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    decoration: BoxDecoration(color: _gold, borderRadius: BorderRadius.circular(12)),
+                    child: Text('Add account',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: _green, fontSize: 14, fontWeight: FontWeight.w600)),
                   ),
                 ),
               ],
