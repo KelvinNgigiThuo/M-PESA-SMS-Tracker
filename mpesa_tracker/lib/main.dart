@@ -6,6 +6,7 @@ import 'dashboard_screen.dart';
 import 'setup_screen.dart';
 import 'main_shell.dart';
 import 'services/setup_service.dart';
+import 'onboarding_screen.dart';
 
 final AppDatabase db = AppDatabase();
 final ValueNotifier<bool> isPrivacyMode = ValueNotifier(false);
@@ -33,6 +34,7 @@ class MpesaTrackerApp extends StatelessWidget {
       routes: {
         '/dashboard': (_) => const MainShell(),
         '/setup': (_) => const SetupScreen(),
+        '/onboarding': (_) => const OnboardingScreen(),
       },
     );
   }
@@ -59,7 +61,7 @@ class _AppEntryState extends State<AppEntry> {
     if (setupDone) {
       Navigator.of(context).pushReplacementNamed('/dashboard');
     } else {
-      Navigator.of(context).pushReplacementNamed('/setup');
+      Navigator.of(context).pushReplacementNamed('/onboarding');
     }
   }
 

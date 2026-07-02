@@ -4,6 +4,11 @@ import 'overlay_channel.dart';
 import 'main.dart';
 import 'widgets/money_text.dart';
 
+const _green = Color(0xFF1A3C34);
+const _gold = Color(0xFFC9A84C);
+const _incomeColor = Color(0xFF5ec47a);
+const _expenseColor = Color(0xFFe05252);
+
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
 
@@ -82,30 +87,68 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final untaggedCount = _all.where((t) => !t.isTagged).length;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F6FA),
-      appBar: AppBar(
-        title: const Text('History'),
-        backgroundColor: const Color(0xFF1A73E8),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _load,
-          ),
-        ],
-      ),
+      backgroundColor: const Color(0xFFF2F5F3),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: CircularProgressIndicator(color: _gold))
           : Column(
               children: [
-                // Untagged banner
+                // ── Dark header ──────────────────────────────────
+                Container(
+                  color: _green,
+                  padding: const EdgeInsets.fromLTRB(20, 56, 20, 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment:
+                            MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'M-PESA TRACKER',
+                            style: TextStyle(
+                              fontSize: 9,
+                              color: _gold.withOpacity(0.6),
+                              letterSpacing: 2,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: _load,
+                            child: Icon(Icons.refresh,
+                                color: _gold.withOpacity(0.5),
+                                size: 16),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Ledger',
+                        style: const TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w700,
+                          color: _gold,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${_all.length} transaction${_all.length != 1 ? 's' : ''}',
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.white.withOpacity(0.4)),
+                      ),
+                    ],
+                  ),
+                ),
+                // ── Untagged banner ──────────────────────────────
                 if (untaggedCount > 0)
                   GestureDetector(
-                    onTap: () => setState(() => _filter = 'untagged'),
+                    onTap: () =>
+                        setState(() => _filter = 'untagged'),
                     child: Container(
                       width: double.infinity,
-                      color: Colors.orange[50],
+                      color: const Color(0xFFFFF8EC),
                       padding: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 10),
                       child: Row(
@@ -118,22 +161,23 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               '$untaggedCount transaction${untaggedCount > 1 ? 's' : ''} '
                               'waiting to be tagged',
                               style: TextStyle(
-                                  fontSize: 13,
+                                  fontSize: 12,
                                   color: Colors.orange[800],
                                   fontWeight: FontWeight.w500),
                             ),
                           ),
                           Text('View',
                               style: TextStyle(
-                                  fontSize: 13,
+                                  fontSize: 12,
                                   color: Colors.orange[700],
                                   fontWeight: FontWeight.w600)),
                         ],
                       ),
                     ),
                   ),
-                // Filter chips
-                SizedBox(
+                // ── Filter chips ─────────────────────────────────
+                Container(
+                  color: Colors.white,
                   height: 48,
                   child: ListView(
                     scrollDirection: Axis.horizontal,
@@ -143,52 +187,78 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       final isSelected = _filter == f['value'];
                       return Padding(
                         padding: const EdgeInsets.only(right: 8),
-                        child: ChoiceChip(
-                          label: Text(f['label']!),
-                          selected: isSelected,
-                          onSelected: (_) =>
-                              setState(() => _filter = f['value']!),
-                          selectedColor: const Color(0xFF1A73E8),
-                          labelStyle: TextStyle(
-                            fontSize: 12,
-                            color: isSelected
-                                ? Colors.white
-                                : Colors.black87,
+                        child: GestureDetector(
+                          onTap: () => setState(
+                              () => _filter = f['value']!),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? _green
+                                  : Colors.transparent,
+                              borderRadius:
+                                  BorderRadius.circular(99),
+                              border: Border.all(
+                                color: isSelected
+                                    ? _green
+                                    : Colors.grey[300]!,
+                                width: 0.5,
+                              ),
+                            ),
+                            child: Text(
+                              f['label']!,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: isSelected
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
+                                color: isSelected
+                                    ? _gold
+                                    : Colors.grey[600],
+                              ),
+                            ),
                           ),
                         ),
                       );
                     }).toList(),
                   ),
                 ),
-                // Transaction count
+                // Thin divider under filter chips
+                Container(height: 0.5, color: Colors.grey[200]),
+                // ── Transaction count ────────────────────────────
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                  padding:
+                      const EdgeInsets.fromLTRB(16, 10, 16, 6),
                   child: Row(
                     children: [
                       Text(
-                        '${_filtered.length} transaction${_filtered.length != 1 ? 's' : ''}',
-                        style:
-                            TextStyle(fontSize: 12, color: Colors.grey[500]),
+                        '${_filtered.length} result${_filtered.length != 1 ? 's' : ''}',
+                        style: TextStyle(
+                            fontSize: 11, color: Colors.grey[400]),
                       ),
                     ],
                   ),
                 ),
-                // List
+                // ── List ─────────────────────────────────────────
                 Expanded(
                   child: _filtered.isEmpty
                       ? Center(
                           child: Text(
                             'No transactions found',
-                            style: TextStyle(color: Colors.grey[400]),
+                            style:
+                                TextStyle(color: Colors.grey[400]),
                           ),
                         )
                       : RefreshIndicator(
+                          color: _gold,
                           onRefresh: _load,
                           child: ListView.builder(
-                            padding:
-                                const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                            padding: const EdgeInsets.fromLTRB(
+                                16, 4, 16, 16),
                             itemCount: _filtered.length,
-                            itemBuilder: (_, i) => _buildRow(_filtered[i]),
+                            itemBuilder: (_, i) =>
+                                _buildRow(_filtered[i]),
                           ),
                         ),
                 ),
@@ -199,7 +269,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Widget _buildRow(Transaction t) {
     final isIn = t.direction == 'in';
-    final color = isIn ? Colors.green : Colors.red;
+    final color = isIn ? _incomeColor : _expenseColor;
     final prefix = isIn ? '+' : '−';
     final label = _typeLabel(t.type ?? 'untagged');
     final sub = t.category ??
@@ -214,25 +284,35 @@ class _HistoryScreenState extends State<HistoryScreen> {
         '${date.hour}:${date.minute.toString().padLeft(2, '0')}';
 
     final card = Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      margin: const EdgeInsets.only(bottom: 6),
+      padding:
+          const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: !t.isTagged ? Colors.orange[200]! : Colors.grey[200]!,
+          color: !t.isTagged
+              ? Colors.orange[100]!
+              : Colors.transparent,
+          width: !t.isTagged ? 1 : 0,
         ),
       ),
       child: Row(
         children: [
           Container(
-            width: 34,
-            height: 34,
+            width: 36,
+            height: 36,
             decoration: BoxDecoration(
               color: t.isTagged
                   ? color.withOpacity(0.1)
-                  : Colors.orange.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
+                  : Colors.orange.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: t.isTagged
+                    ? color.withOpacity(0.15)
+                    : Colors.orange.withOpacity(0.2),
+                width: 0.5,
+              ),
             ),
             child: Icon(
               !t.isTagged
@@ -241,7 +321,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       ? Icons.arrow_downward
                       : Icons.arrow_upward,
               color: t.isTagged ? color : Colors.orange,
-              size: 16,
+              size: 15,
             ),
           ),
           const SizedBox(width: 12),
@@ -251,15 +331,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
               children: [
                 Text(label,
                     style: const TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.w500)),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.black87)),
                 if (sub.isNotEmpty)
                   Text(sub,
                       style: TextStyle(
-                          fontSize: 11, color: Colors.grey[500]),
+                          fontSize: 11, color: Colors.grey[400]),
                       overflow: TextOverflow.ellipsis),
                 Text(dateStr,
-                    style:
-                        TextStyle(fontSize: 10, color: Colors.grey[400])),
+                    style: TextStyle(
+                        fontSize: 10, color: Colors.grey[400])),
               ],
             ),
           ),
@@ -279,12 +361,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: Colors.orange[100],
+                    color: Colors.orange[50],
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: const Text('tap to tag',
-                      style:
-                          TextStyle(fontSize: 9, color: Colors.orange)),
+                      style: TextStyle(
+                          fontSize: 9, color: Colors.orange)),
                 ),
             ],
           ),
@@ -292,7 +374,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
       ),
     );
 
-    // Untagged rows open the tag card on tap
     if (!t.isTagged) {
       return GestureDetector(
         onTap: () async {

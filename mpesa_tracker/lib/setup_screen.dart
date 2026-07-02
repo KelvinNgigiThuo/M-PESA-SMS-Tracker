@@ -4,6 +4,9 @@ import 'database/app_database.dart';
 import 'main.dart';
 import 'services/setup_service.dart';
 
+const _green = Color(0xFF1A3C34);
+const _gold = Color(0xFFC9A84C);
+
 class SetupScreen extends StatefulWidget {
   const SetupScreen({super.key});
 
@@ -16,6 +19,13 @@ class _SetupScreenState extends State<SetupScreen> {
   final Map<int, TextEditingController> _controllers = {};
   bool _loading = true;
   bool _saving = false;
+
+  static const _zoneInfo = {
+    1: {'label': 'Operating', 'subtitle': 'M-Pesa and day-to-day accounts'},
+    2: {'label': 'Reserves', 'subtitle': 'M-Shwari, KCB M-Pesa — same-day access'},
+    3: {'label': 'Committed', 'subtitle': 'Bank accounts and locked savings'},
+    4: {'label': 'Invested', 'subtitle': 'Long-term — Etica, Company equity'},
+  };
 
   @override
   void initState() {
@@ -50,102 +60,104 @@ class _SetupScreenState extends State<SetupScreen> {
 
   Future<void> _save() async {
     setState(() => _saving = true);
-
     for (final account in _accounts) {
       final text = _controllers[account.id]?.text.trim() ?? '';
-      final balance = double.tryParse(text.replaceAll(',', '')) ?? 0.0;
+      final balance =
+          double.tryParse(text.replaceAll(',', '')) ?? 0.0;
       await db.updateOpeningBalance(account.id, balance);
     }
-
     await SetupService.markSetupComplete();
-
     if (mounted) {
       Navigator.of(context).pushReplacementNamed('/dashboard');
     }
   }
 
-  String _groupLabel(String group) {
-    switch (group) {
-      case 'mpesa':           return 'M-Pesa';
-      case 'bank':            return 'Bank Accounts';
-      case 'mobile_savings':  return 'Mobile Savings';
-      case 'investment':      return 'Investments';
-      default:                return group;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    // Group accounts by their group field
-    final grouped = <String, List<Account>>{};
+    final grouped = <int, List<Account>>{};
     for (final a in _accounts) {
-      grouped.putIfAbsent(a.group, () => []).add(a);
+      grouped.putIfAbsent(a.zone, () => []).add(a);
     }
 
-    final groupOrder = ['mpesa', 'bank', 'mobile_savings', 'investment'];
-
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F6FA),
-      appBar: AppBar(
-        title: const Text('Set opening balances'),
-        backgroundColor: const Color(0xFF1A73E8),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-      ),
+      backgroundColor: const Color(0xFFF2F5F3),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: CircularProgressIndicator(color: _gold))
           : Column(
               children: [
-                // Header
+                // ── Dark header ──────────────────────────────────
                 Container(
+                  color: _green,
                   width: double.infinity,
-                  color: const Color(0xFF1A73E8),
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-                  child: const Text(
-                    'Enter what each account holds right now.\nSkip any account you don\'t use.',
-                    style: TextStyle(color: Colors.white70, fontSize: 13),
-                  ),
-                ),
-                // Account list
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.all(16),
+                  padding:
+                      const EdgeInsets.fromLTRB(20, 56, 20, 28),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      for (final group in groupOrder)
-                        if (grouped.containsKey(group)) ...[
-                          Padding(
-                            padding: const EdgeInsets.only(
-                                top: 16, bottom: 8),
-                            child: Text(
-                              _groupLabel(group),
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.grey,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ),
-                          for (final account in grouped[group]!)
-                            _buildAccountRow(account),
-                        ],
-                      const SizedBox(height: 24),
+                      Text(
+                        'M-PESA TRACKER',
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: _gold.withOpacity(0.6),
+                          letterSpacing: 2,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Set your balances',
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w700,
+                          color: _gold,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Enter what each account holds right now.\nSkip anything you don\'t use — you can update anytime.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white.withOpacity(0.45),
+                          height: 1.5,
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                // Save button
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+                // ── Account list ─────────────────────────────────
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(
+                        16, 20, 16, 16),
+                    children: [
+                      for (var zone = 1; zone <= 4; zone++)
+                        if (grouped.containsKey(zone)) ...[
+                          _buildZoneHeader(zone),
+                          const SizedBox(height: 8),
+                          for (final account in grouped[zone]!)
+                            _buildAccountRow(account),
+                          const SizedBox(height: 16),
+                        ],
+                    ],
+                  ),
+                ),
+                // ── Save button ──────────────────────────────────
+                Container(
+                  color: const Color(0xFFF2F5F3),
+                  padding:
+                      const EdgeInsets.fromLTRB(16, 8, 16, 40),
                   child: GestureDetector(
                     onTap: _saving ? null : _save,
                     child: Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      padding:
+                          const EdgeInsets.symmetric(vertical: 14),
                       decoration: BoxDecoration(
                         color: _saving
                             ? Colors.grey[300]
-                            : const Color(0xFF1A73E8),
+                            : _green,
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: _saving
@@ -155,7 +167,7 @@ class _SetupScreenState extends State<SetupScreen> {
                                 height: 20,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  color: Colors.white,
+                                  color: _gold,
                                 ),
                               ),
                             )
@@ -163,7 +175,7 @@ class _SetupScreenState extends State<SetupScreen> {
                               'Done — take me to my dashboard',
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                color: Colors.white,
+                                color: _gold,
                                 fontSize: 15,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -176,14 +188,37 @@ class _SetupScreenState extends State<SetupScreen> {
     );
   }
 
+  Widget _buildZoneHeader(int zone) {
+    final info = _zoneInfo[zone]!;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          (info['label']! as String).toUpperCase(),
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey[500],
+            letterSpacing: 0.8,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          info['subtitle']! as String,
+          style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+        ),
+      ],
+    );
+  }
+
   Widget _buildAccountRow(Account account) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      margin: const EdgeInsets.only(bottom: 6),
+      padding:
+          const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[200]!),
       ),
       child: Row(
         children: [
@@ -191,16 +226,17 @@ class _SetupScreenState extends State<SetupScreen> {
             child: Text(
               account.name,
               style: const TextStyle(
-                  fontSize: 14, fontWeight: FontWeight.w500),
+                  fontSize: 13, fontWeight: FontWeight.w500),
             ),
           ),
-          const Text(
+          Text(
             'Ksh',
-            style: TextStyle(fontSize: 13, color: Colors.grey),
+            style: TextStyle(
+                fontSize: 12, color: Colors.grey[400]),
           ),
           const SizedBox(width: 8),
           SizedBox(
-            width: 120,
+            width: 110,
             child: TextField(
               controller: _controllers[account.id],
               keyboardType: const TextInputType.numberWithOptions(
@@ -210,14 +246,19 @@ class _SetupScreenState extends State<SetupScreen> {
                     RegExp(r'[\d,.]')),
               ],
               textAlign: TextAlign.right,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 hintText: '0.00',
+                hintStyle:
+                    TextStyle(color: Colors.grey[300]),
                 border: InputBorder.none,
                 isDense: true,
                 contentPadding: EdgeInsets.zero,
               ),
               style: const TextStyle(
-                  fontSize: 14, fontWeight: FontWeight.w500),
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: _green,
+              ),
             ),
           ),
         ],
