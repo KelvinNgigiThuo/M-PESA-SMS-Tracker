@@ -96,7 +96,7 @@ class _SetupScreenState extends State<SetupScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'M-PESA TRACKER',
+                        'DHAHIRI',
                         style: TextStyle(
                           fontSize: 9,
                           color: _gold.withOpacity(0.6),
