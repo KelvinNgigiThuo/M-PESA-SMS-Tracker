@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'dashboard_screen.dart';
-import 'accounts_screen.dart';
-import 'history_screen.dart';
-import 'settings_screen.dart';
+import '../screens/dashboard_screen.dart';
+import '../screens/accounts_screen.dart';
+import '../screens/history_screen.dart';
+import '../screens/settings_screen.dart';
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key});

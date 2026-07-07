@@ -1,46 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'database/app_database.dart';
-import 'overlay_channel.dart';
-import 'dashboard_screen.dart';
-import 'setup_screen.dart';
-import 'main_shell.dart';
 import 'services/setup_service.dart';
-import 'onboarding_screen.dart';
+import 'screens/main_shell.dart';
+import 'screens/setup_screen.dart';
+import 'screens/onboarding_screen.dart';
+import 'app.dart';
+import 'overlay_channel.dart';
 
 final AppDatabase db = AppDatabase();
 final ValueNotifier<bool> isPrivacyMode = ValueNotifier(false);
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const MpesaTrackerApp());
+  runApp(const DhahiriApp(home: AppEntry()));
 }
 
-class MpesaTrackerApp extends StatelessWidget {
-  const MpesaTrackerApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'M-Pesa Tracker',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xFF1A73E8)),
-        scaffoldBackgroundColor: Colors.transparent,
-        useMaterial3: true,
-      ),
-      home: const AppEntry(),
-      routes: {
-        '/dashboard': (_) => const MainShell(),
-        '/setup': (_) => const SetupScreen(),
-        '/onboarding': (_) => const OnboardingScreen(),
-      },
-    );
-  }
-} // ← this closing brace was missing
-
-// Decides whether to show setup or dashboard on launch
 class AppEntry extends StatefulWidget {
   const AppEntry({super.key});
 
@@ -68,15 +43,16 @@ class _AppEntryState extends State<AppEntry> {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
-      backgroundColor: Color(0xFF1A73E8),
+      backgroundColor: Color(0xFF1A3C34),
       body: Center(
-        child: CircularProgressIndicator(color: Colors.white),
+        child: CircularProgressIndicator(
+            color: Color(0xFFC9A84C)),
       ),
     );
   }
 }
 
-// Separate entry point for TagCardActivity — transparent scaffold only
+// ── TagCard entry point (used by TagCardActivity) ─────────────
 @pragma('vm:entry-point')
 void tagCardMain() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -93,7 +69,7 @@ class TagCardApp extends StatelessWidget {
       theme: ThemeData(
         scaffoldBackgroundColor: Colors.transparent,
         colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xFF1A73E8)),
+            seedColor: const Color(0xFF1A3C34)),
         useMaterial3: true,
       ),
       home: const TagCardHost(),
@@ -109,7 +85,8 @@ class TagCardHost extends StatefulWidget {
 }
 
 class _TagCardHostState extends State<TagCardHost> {
-  static const _channel = MethodChannel('com.kelvin.mpesa/overlay');
+  static const _channel =
+      MethodChannel('com.kelvin.mpesa/overlay');
 
   @override
   void initState() {

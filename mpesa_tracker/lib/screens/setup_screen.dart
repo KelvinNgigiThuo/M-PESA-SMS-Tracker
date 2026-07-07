@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'database/app_database.dart';
-import 'main.dart';
-import 'services/setup_service.dart';
+import '../database/app_database.dart';
+import '../main.dart';
+import '../services/setup_service.dart';
 
 const _green = Color(0xFF1A3C34);
 const _gold = Color(0xFFC9A84C);
