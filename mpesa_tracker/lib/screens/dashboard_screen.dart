@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../database/app_database.dart';
-import '../overlay_channel.dart';
+import '../overlay/overlay_channel.dart';
 import '../main.dart';
 import '../widgets/money_text.dart';
 

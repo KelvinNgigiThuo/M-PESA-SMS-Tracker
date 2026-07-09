@@ -1,72 +1,22 @@
 import 'package:flutter/material.dart';
-import 'main.dart';
-import 'database/app_database.dart';
+import '../main.dart';
+import '../database/app_database.dart';
 import 'package:drift/drift.dart' as drift;
 
 // ── Colour constants ──────────────────────────────────────────────────
-const _green = Color(0xFF1A3C34);
-const _gold = Color(0xFFC9A84C);
-const _white = Colors.white;
+const tagCardGreen = Color(0xFF1A3C34);
+const tagCardGold = Color(0xFFC9A84C);
+const tagCardWhite = Colors.white;
 
-Future<void> showTagCard(BuildContext context, Map<String, dynamic> data) async {
-  final amount = (data['amount'] as num).toDouble();
-  final txCost = (data['txCost'] as num?)?.toDouble() ?? 0.0;
-  final recipient = data['recipient'] as String;
-  final direction = data['direction'] as String;
-  final txCode = data['txCode'] as String;
-  final balance = (data['balance'] as num).toDouble();
-
-  if (txCost > 0) {
-    await db.insertTransaction(TransactionsCompanion(
-      txCode: drift.Value('${txCode}_fee'),
-      amount: drift.Value(txCost),
-      recipient: drift.Value('M-Pesa'),
-      direction: drift.Value('out'),
-      type: drift.Value('fee'),
-      category: drift.Value('Transaction fee'),
-      balanceAfter: drift.Value(balance),
-      rawSms: drift.Value('auto-split fee'),
-      createdAt: drift.Value(DateTime.now()),
-      isTagged: drift.Value(true),
-    ));
-  }
-
-  final secondaryBalance =
-      (data['secondaryBalance'] as num?)?.toDouble() ?? 0.0;
-  final secondaryAccount = data['secondaryAccount'] as String? ?? '';
-
-  if (secondaryBalance > 0 && secondaryAccount.isNotEmpty) {
-    final account = await db.getAccountByName(secondaryAccount);
-    if (account != null) {
-      await db.setManualBalance(account.id, secondaryBalance);
-    }
-  }
-
-  if (!context.mounted) return;
-
-  await showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    isDismissible: true,
-    builder: (_) => _TagCard(
-      amount: amount,
-      recipient: recipient,
-      direction: direction,
-      txCode: txCode,
-      balance: balance,
-    ),
-  );
-}
-
-class _TagCard extends StatefulWidget {
+class TagCard extends StatefulWidget {
   final double amount;
   final String recipient;
   final String direction;
   final String txCode;
   final double balance;
 
-  const _TagCard({
+  const TagCard({
+    super.key,
     required this.amount,
     required this.recipient,
     required this.direction,
@@ -75,10 +25,10 @@ class _TagCard extends StatefulWidget {
   });
 
   @override
-  State<_TagCard> createState() => _TagCardState();
+  State<TagCard> createState() => _TagCardState();
 }
 
-class _TagCardState extends State<_TagCard> {
+class _TagCardState extends State<TagCard> {
   String _screen = 'root';
   String? _selectedCategory;
   final _noteController = TextEditingController();
@@ -97,10 +47,10 @@ class _TagCardState extends State<_TagCard> {
     return Container(
       margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
       decoration: BoxDecoration(
-        color: _green,
+        color: tagCardGreen,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
-            color: _gold.withOpacity(0.25), width: 0.5),
+            color: tagCardGold.withOpacity(0.25), width: 0.5),
       ),
       padding: EdgeInsets.fromLTRB(
         16, 12, 16,
@@ -110,7 +60,9 @@ class _TagCardState extends State<_TagCard> {
         duration: const Duration(milliseconds: 200),
         transitionBuilder: (child, animation) =>
             FadeTransition(opacity: animation, child: child),
-        child: _showSuccess ? _buildSuccessState() : _buildNormalState(),
+        child: _showSuccess
+            ? _buildSuccessState()
+            : _buildNormalState(),
       ),
     );
   }
@@ -124,7 +76,7 @@ class _TagCardState extends State<_TagCard> {
           width: 36,
           height: 3,
           decoration: BoxDecoration(
-            color: _white.withOpacity(0.2),
+            color: tagCardWhite.withOpacity(0.2),
             borderRadius: BorderRadius.circular(2),
           ),
         ),
@@ -135,36 +87,37 @@ class _TagCardState extends State<_TagCard> {
   }
 
   Widget _buildSuccessState() {
-  return SizedBox(
-    key: const ValueKey('success'),
-    width: double.infinity,
-    height: 140,
-    child: Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Container(
-          width: 52,
-          height: 52,
-          decoration: BoxDecoration(
-            color: _gold.withOpacity(0.15),
-            shape: BoxShape.circle,
-            border: Border.all(color: _gold, width: 1.5),
+    return SizedBox(
+      key: const ValueKey('success'),
+      width: double.infinity,
+      height: 140,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: tagCardGold.withOpacity(0.15),
+              shape: BoxShape.circle,
+              border: Border.all(color: tagCardGold, width: 1.5),
+            ),
+            child: const Icon(Icons.check,
+                color: tagCardGold, size: 26),
           ),
-          child: const Icon(Icons.check, color: _gold, size: 26),
-        ),
-        const SizedBox(height: 12),
-        const Text(
-          'Saved',
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: _white,
+          const SizedBox(height: 12),
+          const Text(
+            'Saved',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: tagCardWhite,
+            ),
           ),
-        ),
-      ],
-    ),
-  );
-}
+        ],
+      ),
+    );
+  }
 
   Widget _buildScreen() {
     switch (_screen) {
@@ -181,7 +134,6 @@ class _TagCardState extends State<_TagCard> {
     }
   }
 
-  // ── Shared header ─────────────────────────────────────────────────
   Widget _header(String label, {String? backScreen}) {
     return Row(
       children: [
@@ -189,25 +141,24 @@ class _TagCardState extends State<_TagCard> {
           GestureDetector(
             onTap: () => setState(() => _screen = backScreen),
             child: Icon(Icons.chevron_left,
-                color: _white.withOpacity(0.5), size: 20),
+                color: tagCardWhite.withOpacity(0.5), size: 20),
           ),
         if (backScreen != null) const SizedBox(width: 4),
         Expanded(
           child: Text(label,
               style: TextStyle(
                   fontSize: 11,
-                  color: _white.withOpacity(0.5))),
+                  color: tagCardWhite.withOpacity(0.5))),
         ),
         GestureDetector(
           onTap: () => _saveUntagged(),
           child: Icon(Icons.close,
-              color: _white.withOpacity(0.4), size: 18),
+              color: tagCardWhite.withOpacity(0.4), size: 18),
         ),
       ],
     );
   }
 
-  // ── Amount display ────────────────────────────────────────────────
   Widget _amountRow(String subLabel) {
     final amtStr = widget.amount % 1 == 0
         ? 'Ksh ${widget.amount.toInt()}'
@@ -219,18 +170,17 @@ class _TagCardState extends State<_TagCard> {
             style: const TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.w700,
-                color: _gold,
+                color: tagCardGold,
                 letterSpacing: -0.5)),
         Text(subLabel,
             style: TextStyle(
                 fontSize: 12,
-                color: _white.withOpacity(0.45))),
+                color: tagCardWhite.withOpacity(0.45))),
         const SizedBox(height: 16),
       ],
     );
   }
 
-  // ── Flow row (root option) ────────────────────────────────────────
   Widget _flowRow({
     required IconData icon,
     required Color iconColor,
@@ -249,7 +199,7 @@ class _TagCardState extends State<_TagCard> {
               ? null
               : Border(
                   bottom: BorderSide(
-                      color: _white.withOpacity(0.08),
+                      color: tagCardWhite.withOpacity(0.08),
                       width: 0.5)),
         ),
         child: Row(
@@ -261,8 +211,7 @@ class _TagCardState extends State<_TagCard> {
                 color: iconBg,
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                    color: iconColor.withOpacity(0.3),
-                    width: 0.5),
+                    color: iconColor.withOpacity(0.3), width: 0.5),
               ),
               child: Icon(icon, color: iconColor, size: 17),
             ),
@@ -275,23 +224,22 @@ class _TagCardState extends State<_TagCard> {
                       style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
-                          color: _white)),
+                          color: tagCardWhite)),
                   Text(subtitle,
                       style: TextStyle(
                           fontSize: 11,
-                          color: _white.withOpacity(0.4))),
+                          color: tagCardWhite.withOpacity(0.4))),
                 ],
               ),
             ),
             Icon(Icons.chevron_right,
-                color: _white.withOpacity(0.25), size: 16),
+                color: tagCardWhite.withOpacity(0.25), size: 16),
           ],
         ),
       ),
     );
   }
 
-  // ── Root screen ───────────────────────────────────────────────────
   Widget _buildRoot() {
     final isOut = widget.direction == 'out';
     final dirLabel = isOut
@@ -308,15 +256,15 @@ class _TagCardState extends State<_TagCard> {
             GestureDetector(
               onTap: () => _saveUntagged(),
               child: Icon(Icons.close,
-                  color: _white.withOpacity(0.4), size: 20),
+                  color: tagCardWhite.withOpacity(0.4), size: 20),
             ),
           ],
         ),
         if (isOut) ...[
           _flowRow(
             icon: Icons.account_balance_outlined,
-            iconColor: _gold,
-            iconBg: _gold.withOpacity(0.12),
+            iconColor: tagCardGold,
+            iconBg: tagCardGold.withOpacity(0.12),
             title: 'My account',
             subtitle: 'Transfer to a bucket',
             onTap: () => setState(() => _screen = 'bucket'),
@@ -341,8 +289,8 @@ class _TagCardState extends State<_TagCard> {
         ] else ...[
           _flowRow(
             icon: Icons.account_balance_outlined,
-            iconColor: _gold,
-            iconBg: _gold.withOpacity(0.12),
+            iconColor: tagCardGold,
+            iconBg: tagCardGold.withOpacity(0.12),
             title: 'From my account',
             subtitle: 'Transfer from a bucket',
             onTap: () => setState(() => _screen = 'bucket'),
@@ -369,7 +317,6 @@ class _TagCardState extends State<_TagCard> {
     );
   }
 
-  // ── Bucket picker ─────────────────────────────────────────────────
   Widget _buildBucketPicker() {
     final isOut = widget.direction == 'out';
     final label = isOut
@@ -377,15 +324,15 @@ class _TagCardState extends State<_TagCard> {
         : 'From my account · Ksh ${widget.amount.toInt()}';
 
     final buckets = [
-      {'name': 'Other M-Pesa',   'icon': Icons.phone_android},
-      {'name': 'NCBA',           'icon': Icons.account_balance},
-      {'name': 'KCB Bank',       'icon': Icons.account_balance},
-      {'name': 'KCB M-Pesa',     'icon': Icons.account_balance_wallet},
-      {'name': 'M-Shwari',       'icon': Icons.savings},
-      {'name': 'M-Shwari Lock',  'icon': Icons.lock_outline},
-      {'name': 'KCB M-Pesa Lock','icon': Icons.lock_outline},
-      {'name': 'Etica',          'icon': Icons.trending_up},
-      {'name': 'Company',        'icon': Icons.business_outlined},
+      {'name': 'Other M-Pesa',    'icon': Icons.phone_android},
+      {'name': 'NCBA',            'icon': Icons.account_balance},
+      {'name': 'KCB Bank',        'icon': Icons.account_balance},
+      {'name': 'KCB M-Pesa',      'icon': Icons.account_balance_wallet},
+      {'name': 'M-Shwari',        'icon': Icons.savings},
+      {'name': 'M-Shwari Lock',   'icon': Icons.lock_outline},
+      {'name': 'KCB M-Pesa Lock', 'icon': Icons.lock_outline},
+      {'name': 'Etica',           'icon': Icons.trending_up},
+      {'name': 'Company',         'icon': Icons.business_outlined},
     ];
 
     return Column(
@@ -405,23 +352,24 @@ class _TagCardState extends State<_TagCard> {
               onTap: () => _saveTransfer(b['name'] as String),
               child: Container(
                 decoration: BoxDecoration(
-                  color: _gold.withOpacity(0.08),
+                  color: tagCardGold.withOpacity(0.08),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                      color: _gold.withOpacity(0.2), width: 0.5),
+                      color: tagCardGold.withOpacity(0.2),
+                      width: 0.5),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(b['icon'] as IconData,
-                        color: _gold, size: 15),
+                        color: tagCardGold, size: 15),
                     const SizedBox(width: 6),
                     Flexible(
                       child: Text(b['name'] as String,
                           style: const TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w500,
-                              color: _white),
+                              color: tagCardWhite),
                           overflow: TextOverflow.ellipsis),
                     ),
                   ],
@@ -434,20 +382,20 @@ class _TagCardState extends State<_TagCard> {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                      color: _gold.withOpacity(0.3),
-                      style: BorderStyle.solid,
+                      color: tagCardGold.withOpacity(0.3),
                       width: 0.5),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(Icons.add,
-                        color: _gold.withOpacity(0.7), size: 15),
+                        color: tagCardGold.withOpacity(0.7),
+                        size: 15),
                     const SizedBox(width: 6),
                     Text('Add new',
                         style: TextStyle(
                             fontSize: 11,
-                            color: _gold.withOpacity(0.7))),
+                            color: tagCardGold.withOpacity(0.7))),
                   ],
                 ),
               ),
@@ -463,28 +411,30 @@ class _TagCardState extends State<_TagCard> {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: _green,
+        backgroundColor: tagCardGreen,
         title: const Text('Add account',
-            style: TextStyle(fontSize: 15, color: _white)),
+            style: TextStyle(fontSize: 15, color: tagCardWhite)),
         content: TextField(
           controller: controller,
           autofocus: true,
-          style: const TextStyle(color: _white),
+          style: const TextStyle(color: tagCardWhite),
           decoration: InputDecoration(
             hintText: 'e.g. CIC Money Market',
-            hintStyle: TextStyle(color: _white.withOpacity(0.4)),
+            hintStyle:
+                TextStyle(color: tagCardWhite.withOpacity(0.4)),
             enabledBorder: UnderlineInputBorder(
-                borderSide:
-                    BorderSide(color: _gold.withOpacity(0.5))),
+                borderSide: BorderSide(
+                    color: tagCardGold.withOpacity(0.5))),
             focusedBorder: const UnderlineInputBorder(
-                borderSide: BorderSide(color: _gold)),
+                borderSide: BorderSide(color: tagCardGold)),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: Text('Cancel',
-                style: TextStyle(color: _white.withOpacity(0.5))),
+                style: TextStyle(
+                    color: tagCardWhite.withOpacity(0.5))),
           ),
           TextButton(
             onPressed: () {
@@ -495,14 +445,13 @@ class _TagCardState extends State<_TagCard> {
               }
             },
             child: const Text('Save',
-                style: TextStyle(color: _gold)),
+                style: TextStyle(color: tagCardGold)),
           ),
         ],
       ),
     );
   }
 
-  // ── Not mine sub-choice ───────────────────────────────────────────
   Widget _buildNotMine() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -523,8 +472,8 @@ class _TagCardState extends State<_TagCard> {
         ),
         _flowRow(
           icon: Icons.undo,
-          iconColor: _gold,
-          iconBg: _gold.withOpacity(0.12),
+          iconColor: tagCardGold,
+          iconBg: tagCardGold.withOpacity(0.12),
           title: "I'll be paid back",
           subtitle: 'Creates a reimbursable record',
           onTap: () => setState(() {
@@ -537,7 +486,6 @@ class _TagCardState extends State<_TagCard> {
     );
   }
 
-  // ── Inflow not mine ───────────────────────────────────────────────
   Widget _buildInflowNotMine() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -569,35 +517,37 @@ class _TagCardState extends State<_TagCard> {
     );
   }
 
-  // ── Note field shared ─────────────────────────────────────────────
   Widget _noteField(String hint) {
     return TextField(
       controller: _noteController,
       autofocus: true,
-      style: const TextStyle(color: _white, fontSize: 14),
-      cursorColor: _gold,
+      style: const TextStyle(color: tagCardWhite, fontSize: 14),
+      cursorColor: tagCardGold,
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: TextStyle(color: _white.withOpacity(0.3)),
+        hintStyle:
+            TextStyle(color: tagCardWhite.withOpacity(0.3)),
         enabledBorder: UnderlineInputBorder(
-            borderSide: BorderSide(color: _white.withOpacity(0.15))),
+            borderSide: BorderSide(
+                color: tagCardWhite.withOpacity(0.15))),
         focusedBorder: const UnderlineInputBorder(
-            borderSide: BorderSide(color: _gold)),
+            borderSide: BorderSide(color: tagCardGold)),
       ),
     );
   }
 
-  // ── Custody note ──────────────────────────────────────────────────
   Widget _buildCustodyNote() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _header("Holding their money · Ksh ${widget.amount.toInt()}",
+        _header(
+            "Holding their money · Ksh ${widget.amount.toInt()}",
             backScreen: 'not_mine'),
         const SizedBox(height: 16),
         Text("What's this for?",
             style: TextStyle(
-                fontSize: 11, color: _white.withOpacity(0.5))),
+                fontSize: 11,
+                color: tagCardWhite.withOpacity(0.5))),
         const SizedBox(height: 8),
         _noteField('e.g. Fuel float, Westlands job'),
         const SizedBox(height: 20),
@@ -606,7 +556,6 @@ class _TagCardState extends State<_TagCard> {
     );
   }
 
-  // ── Reimbursable note ─────────────────────────────────────────────
   Widget _buildReimbursableNote() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -616,7 +565,8 @@ class _TagCardState extends State<_TagCard> {
         const SizedBox(height: 16),
         Text("Which job is this for?",
             style: TextStyle(
-                fontSize: 11, color: _white.withOpacity(0.5))),
+                fontSize: 11,
+                color: tagCardWhite.withOpacity(0.5))),
         const SizedBox(height: 8),
         _noteField('e.g. Client X supplies'),
         const SizedBox(height: 20),
@@ -625,7 +575,6 @@ class _TagCardState extends State<_TagCard> {
     );
   }
 
-  // ── Custody receive ───────────────────────────────────────────────
   Widget _buildCustodyReceive() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -635,7 +584,8 @@ class _TagCardState extends State<_TagCard> {
         const SizedBox(height: 16),
         Text("What pool is this for?",
             style: TextStyle(
-                fontSize: 11, color: _white.withOpacity(0.5))),
+                fontSize: 11,
+                color: tagCardWhite.withOpacity(0.5))),
         const SizedBox(height: 8),
         _noteField('e.g. Fuel float, Westlands job'),
         const SizedBox(height: 20),
@@ -644,7 +594,6 @@ class _TagCardState extends State<_TagCard> {
     );
   }
 
-  // ── Expense picker ────────────────────────────────────────────────
   Widget _buildExpense() {
     const categories = [
       'Food', 'Transport', 'Supplies', 'Bills', 'Airtime', 'Other'
@@ -661,19 +610,20 @@ class _TagCardState extends State<_TagCard> {
           children: categories.map((c) {
             final selected = _selectedCategory == c;
             return GestureDetector(
-              onTap: () => setState(() => _selectedCategory = c),
+              onTap: () =>
+                  setState(() => _selectedCategory = c),
               child: Container(
                 padding: const EdgeInsets.symmetric(
                     horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
                   color: selected
                       ? const Color(0xFFe87070).withOpacity(0.2)
-                      : _white.withOpacity(0.06),
+                      : tagCardWhite.withOpacity(0.06),
                   borderRadius: BorderRadius.circular(99),
                   border: Border.all(
                     color: selected
                         ? const Color(0xFFe87070).withOpacity(0.6)
-                        : _white.withOpacity(0.12),
+                        : tagCardWhite.withOpacity(0.12),
                     width: 0.5,
                   ),
                 ),
@@ -685,27 +635,31 @@ class _TagCardState extends State<_TagCard> {
                             : FontWeight.w400,
                         color: selected
                             ? const Color(0xFFe87070)
-                            : _white.withOpacity(0.8))),
+                            : tagCardWhite.withOpacity(0.8))),
               ),
             );
           }).toList(),
         ),
         const SizedBox(height: 20),
-        _saveBtn('Save',
-            _selectedCategory == null ? null : () => _saveExpense()),
+        _saveBtn(
+            'Save',
+            _selectedCategory == null
+                ? null
+                : () => _saveExpense()),
       ],
     );
   }
 
-  // ── Receivable match ──────────────────────────────────────────────
   Widget _buildReceivableMatch() {
     if (_loadingReceivables) {
       return Column(children: [
-        _header("Clears what I'm owed · Ksh ${widget.amount.toInt()}",
+        _header(
+            "Clears what I'm owed · Ksh ${widget.amount.toInt()}",
             backScreen: 'inflow_not_mine'),
         const SizedBox(height: 24),
         const Center(
-            child: CircularProgressIndicator(color: _gold)),
+            child:
+                CircularProgressIndicator(color: tagCardGold)),
         const SizedBox(height: 24),
       ]);
     }
@@ -720,7 +674,8 @@ class _TagCardState extends State<_TagCard> {
             Text(
               'No open receivables found.\nTag as True income instead.',
               style: TextStyle(
-                  fontSize: 13, color: _white.withOpacity(0.5)),
+                  fontSize: 13,
+                  color: tagCardWhite.withOpacity(0.5)),
             ),
             const SizedBox(height: 16),
             _saveBtn('Save as income', () => _saveIncome()),
@@ -730,7 +685,8 @@ class _TagCardState extends State<_TagCard> {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _header("Clears what I'm owed · Ksh ${widget.amount.toInt()}",
+        _header(
+            "Clears what I'm owed · Ksh ${widget.amount.toInt()}",
             backScreen: 'inflow_not_mine'),
         const SizedBox(height: 10),
         ConstrainedBox(
@@ -739,7 +695,8 @@ class _TagCardState extends State<_TagCard> {
             shrinkWrap: true,
             itemCount: _receivables.length,
             separatorBuilder: (_, __) => Divider(
-                color: _white.withOpacity(0.08), height: 1),
+                color: tagCardWhite.withOpacity(0.08),
+                height: 1),
             itemBuilder: (_, i) {
               final r = _receivables[i];
               final label = r.receivableLabel ?? 'Unnamed';
@@ -752,8 +709,8 @@ class _TagCardState extends State<_TagCard> {
               return GestureDetector(
                 onTap: () => _saveReceivableMatch(r),
                 child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                      vertical: 10),
                   child: Row(children: [
                     Container(
                       width: 34,
@@ -761,7 +718,8 @@ class _TagCardState extends State<_TagCard> {
                       decoration: BoxDecoration(
                         color: const Color(0xFF5ec47a)
                             .withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(9),
+                        borderRadius:
+                            BorderRadius.circular(9),
                         border: Border.all(
                             color: const Color(0xFF5ec47a)
                                 .withOpacity(0.3),
@@ -782,19 +740,19 @@ class _TagCardState extends State<_TagCard> {
                               style: const TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w500,
-                                  color: _white)),
+                                  color: tagCardWhite)),
                           Text(
                             income > 0
                                 ? 'Clears Ksh ${cleared.toInt()} · Ksh ${income.toInt()} income'
                                 : 'Clears Ksh ${cleared.toInt()} of Ksh ${owed.toInt()} owed',
                             style: TextStyle(
                                 fontSize: 11,
-                                color:
-                                    _white.withOpacity(0.4)),
+                                color: tagCardWhite
+                                    .withOpacity(0.4)),
                           ),
                         ])),
                     Icon(Icons.chevron_right,
-                        color: _white.withOpacity(0.25),
+                        color: tagCardWhite.withOpacity(0.25),
                         size: 16),
                   ]),
                 ),
@@ -806,7 +764,6 @@ class _TagCardState extends State<_TagCard> {
     );
   }
 
-  // ── Save button ───────────────────────────────────────────────────
   Widget _saveBtn(String label, VoidCallback? onTap) {
     return GestureDetector(
       onTap: onTap,
@@ -815,8 +772,8 @@ class _TagCardState extends State<_TagCard> {
         padding: const EdgeInsets.symmetric(vertical: 13),
         decoration: BoxDecoration(
           color: onTap == null
-              ? _white.withOpacity(0.08)
-              : _gold,
+              ? tagCardWhite.withOpacity(0.08)
+              : tagCardGold,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Text(
@@ -826,15 +783,14 @@ class _TagCardState extends State<_TagCard> {
             fontSize: 13,
             fontWeight: FontWeight.w600,
             color: onTap == null
-                ? _white.withOpacity(0.3)
-                : _green,
+                ? tagCardWhite.withOpacity(0.3)
+                : tagCardGreen,
           ),
         ),
       ),
     );
   }
 
-  // ── Load receivables ──────────────────────────────────────────────
   Future<void> _loadReceivables() async {
     setState(() {
       _loadingReceivables = true;
@@ -847,7 +803,6 @@ class _TagCardState extends State<_TagCard> {
     });
   }
 
-  // ── Upsert ────────────────────────────────────────────────────────
   Future<void> _upsert(TransactionsCompanion companion) async {
     final existing = await (db.select(db.transactions)
       ..where((t) =>
@@ -876,15 +831,15 @@ class _TagCardState extends State<_TagCard> {
     if (mounted) Navigator.pop(context);
   }
 
-  // ── Save methods ──────────────────────────────────────────────────
   Future<void> _saveTransfer(String bucketName) async {
     await _upsert(TransactionsCompanion(
       txCode: drift.Value(widget.txCode),
       amount: drift.Value(widget.amount),
       recipient: drift.Value(widget.recipient),
       direction: drift.Value(widget.direction),
-      type: drift.Value(
-          widget.direction == 'out' ? 'transfer' : 'transfer_in'),
+      type: drift.Value(widget.direction == 'out'
+          ? 'transfer'
+          : 'transfer_in'),
       bucketName: drift.Value(bucketName),
       balanceAfter: drift.Value(widget.balance),
       rawSms: drift.Value(''),
@@ -1017,20 +972,17 @@ class _TagCardState extends State<_TagCard> {
   }
 
   Future<void> _saveUntagged() async {
-    // Check if an untagged record already exists for this txCode
     final existing = await (db.select(db.transactions)
       ..where((t) =>
           t.txCode.equals(widget.txCode) &
           t.isTagged.equals(false)))
-    .getSingleOrNull();
+        .getSingleOrNull();
 
     if (existing != null) {
-      // Already saved as untagged — just close, nothing to do
       if (mounted) Navigator.pop(context);
       return;
     }
 
-    // New SMS dismissed without tagging — save as untagged
     await db.insertTransaction(TransactionsCompanion(
       txCode: drift.Value(widget.txCode),
       amount: drift.Value(widget.amount),
@@ -1041,6 +993,6 @@ class _TagCardState extends State<_TagCard> {
       createdAt: drift.Value(DateTime.now()),
       isTagged: drift.Value(false),
     ));
-    await _completeAndClose();
+    if (mounted) Navigator.pop(context);
   }
 }

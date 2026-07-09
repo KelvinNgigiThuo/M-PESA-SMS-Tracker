@@ -6,7 +6,7 @@ import 'screens/main_shell.dart';
 import 'screens/setup_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'app.dart';
-import 'overlay_channel.dart';
+import 'overlay/overlay_channel.dart';
 
 final AppDatabase db = AppDatabase();
 final ValueNotifier<bool> isPrivacyMode = ValueNotifier(false);
