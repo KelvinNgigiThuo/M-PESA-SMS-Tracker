@@ -439,7 +439,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                   onTap: () async {
                     final name = nameController.text.trim();
                     if (name.isEmpty) return;
-                    await db.addCustomAccount(name, 'custom');
+                    await db.addCustomAccount(name, 'custom', selectedZone);
                     final newAccounts = await db.getAllAccounts();
                     final created = newAccounts.lastWhere((a) => a.name == name);
                     await db.updateAccountZone(created.id, selectedZone);

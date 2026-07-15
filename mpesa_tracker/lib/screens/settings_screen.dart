@@ -1,26 +1,57 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'setup_screen.dart';
 
 const _green = Color(0xFF1A3C34);
 const _gold = Color(0xFFC9A84C);
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  double _bufferTarget = 10000;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPrefs();
+  }
+
+  Future<void> _loadPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _bufferTarget = prefs.getDouble('buffer_target') ?? 10000;
+    });
+  }
+
+  Future<void> _saveBufferTarget(double value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('buffer_target', value);
+    setState(() => _bufferTarget = value);
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F6FA),
+      backgroundColor: const Color(0xFFF2F5F3),
       body: CustomScrollView(
         slivers: [
+          // ── Dark header ──────────────────────────────────────
           SliverToBoxAdapter(
             child: Container(
               color: _green,
+              width: double.infinity,
               padding: const EdgeInsets.fromLTRB(20, 56, 20, 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'M-PESA TRACKER',
+                    'DHAHIRI',
                     style: TextStyle(
                       fontSize: 9,
                       color: _gold.withOpacity(0.6),
@@ -42,32 +73,48 @@ class SettingsScreen extends StatelessWidget {
               ),
             ),
           ),
+          // ── Settings list ────────────────────────────────────
           SliverPadding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
+
+                // ── App section ───────────────────────────────
                 _sectionTitle('App'),
                 _settingRow(
                   icon: Icons.account_balance_wallet_outlined,
                   label: 'Opening balances',
                   subtitle: 'Update your account starting balances',
-                  onTap: () {},
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                        builder: (_) => const SetupScreen()),
+                  ),
+                ),
+                _settingRow(
+                  icon: Icons.shield_outlined,
+                  label: 'Buffer target',
+                  subtitle:
+                      'Currently Ksh ${_bufferTarget.toStringAsFixed(0)}',
+                  onTap: () => _showBufferTargetSheet(),
                 ),
                 _settingRow(
                   icon: Icons.category_outlined,
-                  label: 'Categories',
-                  subtitle: 'Manage expense categories',
+                  label: 'Expense categories',
+                  subtitle: 'Manage your expense categories',
                   onTap: () {},
                   comingSoon: true,
                 ),
                 _settingRow(
-                  icon: Icons.label_outline,
-                  label: 'Tags',
-                  subtitle: 'Customise your tagging options',
+                  icon: Icons.trending_up_outlined,
+                  label: 'Income types',
+                  subtitle: 'Manage your income classifications',
                   onTap: () {},
                   comingSoon: true,
                 ),
+
                 const SizedBox(height: 8),
+
+                // ── Data section ──────────────────────────────
                 _sectionTitle('Data'),
                 _settingRow(
                   icon: Icons.download_outlined,
@@ -80,15 +127,18 @@ class SettingsScreen extends StatelessWidget {
                   icon: Icons.delete_outline,
                   label: 'Clear all data',
                   subtitle: 'Reset the app to a clean state',
-                  onTap: () {},
+                  onTap: () => _showClearDataConfirm(),
                   isDestructive: true,
                 ),
+
                 const SizedBox(height: 8),
+
+                // ── About section ─────────────────────────────
                 _sectionTitle('About'),
                 _settingRow(
                   icon: Icons.info_outline,
                   label: 'Version',
-                  subtitle: 'v1.0.0 — M-Pesa Tracker',
+                  subtitle: 'v1.0.0 — Dhahiri',
                   onTap: () {},
                 ),
               ]),
@@ -99,9 +149,172 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
+  // ── Buffer target sheet ───────────────────────────────────────────
+  void _showBufferTargetSheet() {
+    final controller = TextEditingController(
+        text: _bufferTarget.toStringAsFixed(0));
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: Container(
+          margin: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: _green,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 3,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Buffer target',
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Set the amount you want to maintain in your reserves (Zone 2). '
+                'The progress bar on the dashboard tracks this.',
+                style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.white.withOpacity(0.5),
+                    height: 1.5),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Text('Ksh',
+                      style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.white.withOpacity(0.6))),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: controller,
+                      autofocus: true,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly
+                      ],
+                      style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white),
+                      cursorColor: _gold,
+                      decoration: InputDecoration(
+                        hintText: '10000',
+                        hintStyle: TextStyle(
+                            color: Colors.white.withOpacity(0.3)),
+                        enabledBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(
+                                color:
+                                    Colors.white.withOpacity(0.2))),
+                        focusedBorder:
+                            const UnderlineInputBorder(
+                                borderSide:
+                                    BorderSide(color: _gold)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              GestureDetector(
+                onTap: () async {
+                  final value = double.tryParse(
+                          controller.text.trim()) ??
+                      _bufferTarget;
+                  await _saveBufferTarget(value);
+                  if (mounted) Navigator.pop(ctx);
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    color: _gold,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    'Save target',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: _green),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Clear data confirm ────────────────────────────────────────────
+  void _showClearDataConfirm() {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: _green,
+        title: const Text('Clear all data?',
+            style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.white)),
+        content: Text(
+          'This will permanently delete all transactions and reset your account balances. This cannot be undone.',
+          style: TextStyle(
+              fontSize: 13,
+              color: Colors.white.withOpacity(0.6),
+              height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancel',
+                style: TextStyle(
+                    color: Colors.white.withOpacity(0.5))),
+          ),
+          TextButton(
+            onPressed: () {
+              // Clear data logic — Phase 5
+              Navigator.pop(context);
+            },
+            child: const Text('Clear',
+                style: TextStyle(
+                    color: Colors.red,
+                    fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Shared widgets ────────────────────────────────────────────────
   Widget _sectionTitle(String title) {
     return Padding(
-      padding: const EdgeInsets.only(top: 12, bottom: 6),
+      padding: const EdgeInsets.only(top: 4, bottom: 8),
       child: Text(
         title.toUpperCase(),
         style: TextStyle(
@@ -127,7 +340,7 @@ class SettingsScreen extends StatelessWidget {
     return GestureDetector(
       onTap: comingSoon ? null : onTap,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 5),
+        margin: const EdgeInsets.only(bottom: 6),
         padding: const EdgeInsets.symmetric(
             horizontal: 14, vertical: 13),
         decoration: BoxDecoration(
@@ -161,7 +374,8 @@ class SettingsScreen extends StatelessWidget {
                               : Colors.black87)),
                   Text(subtitle,
                       style: TextStyle(
-                          fontSize: 11, color: Colors.grey[400])),
+                          fontSize: 11,
+                          color: Colors.grey[400])),
                 ],
               ),
             ),

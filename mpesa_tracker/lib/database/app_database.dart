@@ -6,7 +6,7 @@ import 'package:path/path.dart' as p;
 
 part 'app_database.g.dart';
 
-// ── Transactions table (unchanged) ───────────────────────────────────
+// ── Transactions table ────────────────────────────────────────────────
 class Transactions extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get txCode => text()();
@@ -25,71 +25,49 @@ class Transactions extends Table {
   BoolColumn get isTagged => boolean().withDefault(const Constant(false))();
 }
 
-// ── Accounts table (new) ──────────────────────────────────────────────
+// ── Accounts table ────────────────────────────────────────────────────
 class Accounts extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get name => text()();
-  // group: mpesa | bank | mobile_savings | investment
   TextColumn get group => text()();
-  // zone: 1 (operating) | 2 (reserves) | 3 (committed) | 4 (invested)
   IntColumn get zone => integer().withDefault(const Constant(1))();
   RealColumn get openingBalance => real().withDefault(const Constant(0.0))();
   RealColumn get manualBalance => real().nullable()();
   DateTimeColumn get manualBalanceSetAt => dateTime().nullable()();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
+  BoolColumn get isHidden => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime()();
 }
 
-@DriftDatabase(tables: [Transactions, Accounts])
+// ── Categories table ──────────────────────────────────────────────────
+class Categories extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get name => text()();
+  // direction: 'in' | 'out'
+  TextColumn get direction => text()();
+  BoolColumn get isSystem => boolean().withDefault(const Constant(false))();
+  BoolColumn get isActive => boolean().withDefault(const Constant(true))();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime()();
+}
+
+@DriftDatabase(tables: [Transactions, Accounts, Categories])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 1;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) async {
       await m.createAll();
-      // Seed default accounts on fresh install
       await _seedAccounts();
-    },
-    onUpgrade: (m, from, to) async {
-      if (from < 2) {
-        await m.createTable(accounts);
-        await _seedAccounts();
-      }
-      if (from < 3) {
-        await m.addColumn(accounts, accounts.zone);
-        await _assignDefaultZones();
-      }
+      await _seedCategories();
     },
   );
 
-  // Assign zones to existing accounts based on their name
-  Future<void> _assignDefaultZones() async {
-    final zoneMap = {
-      'M-Pesa': 1,
-      'Other M-Pesa': 1,
-      'M-Shwari': 2,
-      'KCB M-Pesa': 2,
-      'M-Shwari Lock': 3,
-      'KCB M-Pesa Lock': 3,
-      'NCBA': 3,
-      'KCB Bank': 3,
-      'Etica': 4,
-      'Company': 4,
-    };
-
-    final all = await select(accounts).get();
-    for (final a in all) {
-      final z = zoneMap[a.name] ?? 1;
-      await (update(accounts)..where((acc) => acc.id.equals(a.id)))
-        .write(AccountsCompanion(zone: Value(z)));
-    }
-  }
-
-  // ── Seed default accounts ───────────────────────────────────────────
+  // ── Seeds ─────────────────────────────────────────────────────────
   Future<void> _seedAccounts() async {
     final defaults = [
       ('M-Pesa',          'mpesa',          1),
@@ -111,12 +89,54 @@ class AppDatabase extends _$AppDatabase {
         zone: Value(zone),
         openingBalance: const Value(0.0),
         isActive: const Value(true),
+        isHidden: const Value(false),
         createdAt: Value(DateTime.now()),
       ));
     }
   }
 
-  // ── Transaction queries ─────────────────────────────────────────────
+  Future<void> _seedCategories() async {
+    final outCategories = [
+      ('Food',      true,  0),
+      ('Transport', true,  1),
+      ('Bills',     true,  2),
+      ('Supplies',  true,  3),
+      ('Airtime',   true,  4),
+      ('Other',     true,  5),
+    ];
+
+    final inCategories = [
+      ('Freelance',       true,  0),
+      ('Business',        true,  1),
+      ('Family Support',  false, 2),
+      ('Gift',            false, 3),
+      ('Other',           true,  4),
+    ];
+
+    for (final (name, isSystem, sort) in outCategories) {
+      await into(categories).insert(CategoriesCompanion(
+        name: Value(name),
+        direction: const Value('out'),
+        isSystem: Value(isSystem),
+        isActive: const Value(true),
+        sortOrder: Value(sort),
+        createdAt: Value(DateTime.now()),
+      ));
+    }
+
+    for (final (name, isSystem, sort) in inCategories) {
+      await into(categories).insert(CategoriesCompanion(
+        name: Value(name),
+        direction: const Value('in'),
+        isSystem: Value(isSystem),
+        isActive: const Value(true),
+        sortOrder: Value(sort),
+        createdAt: Value(DateTime.now()),
+      ));
+    }
+  }
+
+  // ── Transaction queries ───────────────────────────────────────────
   Future<int> insertTransaction(TransactionsCompanion t) =>
       into(transactions).insert(t);
 
@@ -140,7 +160,6 @@ class AppDatabase extends _$AppDatabase {
   Future<Map<String, double>> getBucketBalances() async {
     final all = await select(transactions).get();
     final Map<String, double> balances = {};
-
     for (final t in all) {
       if (t.bucketName == null) continue;
       final bucket = t.bucketName!;
@@ -153,50 +172,6 @@ class AppDatabase extends _$AppDatabase {
     }
     return balances;
   }
-
-  // ── Account queries ─────────────────────────────────────────────────
-  Future<List<Account>> getAllAccounts() =>
-      (select(accounts)
-        ..where((a) => a.isActive.equals(true))
-        ..orderBy([(a) => OrderingTerm.asc(a.id)]))
-      .get();
-  
-  Future<List<Account>> getAccountsByZone(int zone) =>
-    (select(accounts)
-      ..where((a) => a.zone.equals(zone) & a.isActive.equals(true))
-      ..orderBy([(a) => OrderingTerm.asc(a.id)]))
-    .get();
-
-  Future<void> updateAccountZone(int id, int zone) =>
-      (update(accounts)..where((a) => a.id.equals(id)))
-      .write(AccountsCompanion(zone: Value(zone)));
-
-  Future<Account?> getAccountByName(String name) =>
-      (select(accounts)..where((a) => a.name.equals(name)))
-      .getSingleOrNull();
-
-
-  Future<void> updateOpeningBalance(int id, double balance) =>
-      (update(accounts)..where((a) => a.id.equals(id)))
-      .write(AccountsCompanion(
-        openingBalance: Value(balance),
-      ));
-
-  Future<void> setManualBalance(int id, double balance) =>
-      (update(accounts)..where((a) => a.id.equals(id)))
-      .write(AccountsCompanion(
-        manualBalance: Value(balance),
-        manualBalanceSetAt: Value(DateTime.now()),
-      ));
-
-  Future<void> addCustomAccount(String name, String group) =>
-      into(accounts).insert(AccountsCompanion(
-        name: Value(name),
-        group: Value(group),
-        openingBalance: const Value(0.0),
-        isActive: const Value(true),
-        createdAt: Value(DateTime.now()),
-      ));
 
   Future<void> updateTaggedTransaction(
     int id, {
@@ -215,12 +190,101 @@ class AppDatabase extends _$AppDatabase {
         poolLabel: Value(poolLabel),
         receivableLabel: Value(receivableLabel),
       ));
+
+  // ── Account queries ───────────────────────────────────────────────
+  Future<List<Account>> getAllAccounts() =>
+      (select(accounts)
+        ..where((a) => a.isActive.equals(true))
+        ..orderBy([
+          (a) => OrderingTerm.asc(a.zone),
+          (a) => OrderingTerm.asc(a.id),
+        ]))
+      .get();
+
+  Future<Account?> getAccountByName(String name) =>
+      (select(accounts)..where((a) => a.name.equals(name)))
+      .getSingleOrNull();
+
+  Future<bool> hasCompletedSetup() async {
+    final result = await (select(accounts)
+      ..where((a) => a.openingBalance.isBiggerThanValue(0)))
+    .getSingleOrNull();
+    return result != null;
+  }
+
+  Future<void> updateOpeningBalance(int id, double balance) =>
+      (update(accounts)..where((a) => a.id.equals(id)))
+      .write(AccountsCompanion(openingBalance: Value(balance)));
+
+  Future<void> setManualBalance(int id, double balance) =>
+      (update(accounts)..where((a) => a.id.equals(id)))
+      .write(AccountsCompanion(
+        manualBalance: Value(balance),
+        manualBalanceSetAt: Value(DateTime.now()),
+      ));
+
+  Future<void> addCustomAccount(
+      String name, String group, int zone) =>
+      into(accounts).insert(AccountsCompanion(
+        name: Value(name),
+        group: Value(group),
+        zone: Value(zone),
+        openingBalance: const Value(0.0),
+        isActive: const Value(true),
+        isHidden: const Value(false),
+        createdAt: Value(DateTime.now()),
+      ));
+
+  Future<void> renameAccount(int id, String newName) =>
+      (update(accounts)..where((a) => a.id.equals(id)))
+      .write(AccountsCompanion(name: Value(newName)));
+
+  Future<void> updateAccountZone(int id, int zone) =>
+      (update(accounts)..where((a) => a.id.equals(id)))
+      .write(AccountsCompanion(zone: Value(zone)));
+
+  Future<void> toggleAccountHidden(int id, bool hidden) =>
+      (update(accounts)..where((a) => a.id.equals(id)))
+      .write(AccountsCompanion(isHidden: Value(hidden)));
+
+  Future<void> deactivateAccount(int id) =>
+      (update(accounts)..where((a) => a.id.equals(id)))
+      .write(const AccountsCompanion(isActive: Value(false)));
+
+  // ── Category queries ──────────────────────────────────────────────
+  Future<List<Category>> getCategories(String direction) =>
+      (select(categories)
+        ..where((c) =>
+            c.direction.equals(direction) &
+            c.isActive.equals(true))
+        ..orderBy([(c) => OrderingTerm.asc(c.sortOrder)]))
+      .get();
+
+  Future<void> addCategory(
+      String name, String direction, bool isSystem) =>
+      into(categories).insert(CategoriesCompanion(
+        name: Value(name),
+        direction: Value(direction),
+        isSystem: Value(isSystem),
+        isActive: const Value(true),
+        sortOrder: const Value(99),
+        createdAt: Value(DateTime.now()),
+      ));
+
+  Future<void> renameCategory(int id, String newName) =>
+      (update(categories)..where((c) => c.id.equals(id)))
+      .write(CategoriesCompanion(name: Value(newName)));
+
+  Future<void> deactivateCategory(int id) =>
+      (update(categories)..where((c) => c.id.equals(id)))
+      .write(const CategoriesCompanion(isActive: Value(false)));
 }
 
 LazyDatabase _openConnection() {
   return LazyDatabase(() async {
     final dir = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dir.path, 'mpesa_tracker.sqlite'));
+    final file =
+        File(p.join(dir.path, 'dhahiri.sqlite'));
     return NativeDatabase.createInBackground(file);
   });
 }
