@@ -57,17 +57,17 @@ Widget buildBucketPicker(TagCardState s) {
       ? 'My account · Ksh ${s.widget.amount.toInt()}'
       : 'From my account · Ksh ${s.widget.amount.toInt()}';
 
-  final buckets = [
-    {'name': 'Other M-Pesa',    'icon': Icons.phone_android},
-    {'name': 'NCBA',            'icon': Icons.account_balance},
-    {'name': 'KCB Bank',        'icon': Icons.account_balance},
-    {'name': 'KCB M-Pesa',      'icon': Icons.account_balance_wallet},
-    {'name': 'M-Shwari',        'icon': Icons.savings},
-    {'name': 'M-Shwari Lock',   'icon': Icons.lock_outline},
-    {'name': 'KCB M-Pesa Lock', 'icon': Icons.lock_outline},
-    {'name': 'Etica',           'icon': Icons.trending_up},
-    {'name': 'Company',         'icon': Icons.business_outlined},
-  ];
+  if (s.loadingAccounts) {
+    return Column(
+      children: [
+        s.buildHeader(label, backScreen: 'root'),
+        const SizedBox(height: 24),
+        const Center(
+            child: CircularProgressIndicator(color: tagCardGold)),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
 
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -82,8 +82,8 @@ Widget buildBucketPicker(TagCardState s) {
         childAspectRatio: 2.4,
         physics: const NeverScrollableScrollPhysics(),
         children: [
-          ...buckets.map((b) => GestureDetector(
-            onTap: () => saveTransfer(s, b['name'] as String),
+          ...s.bucketAccounts.map((a) => GestureDetector(
+            onTap: () => saveTransfer(s, a.name),
             child: Container(
               decoration: BoxDecoration(
                 color: tagCardGold.withOpacity(0.08),
@@ -95,11 +95,11 @@ Widget buildBucketPicker(TagCardState s) {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(b['icon'] as IconData,
+                  Icon(_zoneIcon(a.zone),
                       color: tagCardGold, size: 15),
                   const SizedBox(width: 6),
                   Flexible(
-                    child: Text(b['name'] as String,
+                    child: Text(a.name,
                         style: const TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
@@ -138,6 +138,16 @@ Widget buildBucketPicker(TagCardState s) {
       ),
     ],
   );
+}
+
+IconData _zoneIcon(int zone) {
+  switch (zone) {
+    case 1: return Icons.phone_android;
+    case 2: return Icons.savings;
+    case 3: return Icons.account_balance;
+    case 4: return Icons.trending_up;
+    default: return Icons.wallet;
+  }
 }
 
 void _showAddBucket(TagCardState s) {

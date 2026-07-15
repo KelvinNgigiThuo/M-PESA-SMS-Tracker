@@ -36,6 +36,8 @@ class TagCardState extends State<TagCard> {
   List<Transaction> receivables = [];
   bool loadingReceivables = false;
   bool showSuccess = false;
+  List<Account> bucketAccounts = [];
+  bool loadingAccounts = false;
 
   @override
   void dispose() {
@@ -128,6 +130,9 @@ class TagCardState extends State<TagCard> {
             ? buildOutflowRoot(this)
             : buildInflowRoot(this);
       case 'bucket':
+        if (bucketAccounts.isEmpty && !loadingAccounts) {
+          loadAccounts();
+        }
         return buildBucketPicker(this);
       case 'not_mine':
         return buildOutflowNotMine(this);
@@ -332,6 +337,16 @@ class TagCardState extends State<TagCard> {
     await Future.delayed(const Duration(milliseconds: 600));
     if (mounted) Navigator.pop(context);
   }
+
+  Future<void> loadAccounts() async {
+    if (bucketAccounts.isNotEmpty) return; // already loaded
+    setState(() => loadingAccounts = true);
+    final all = await db.getAllAccounts();
+    setState(() {
+      bucketAccounts = all;
+      loadingAccounts = false;
+    });
+  } 
 
   Future<void> saveUntagged() async {
     final existing = await (db.select(db.transactions)
