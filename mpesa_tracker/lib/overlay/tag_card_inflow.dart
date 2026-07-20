@@ -45,9 +45,14 @@ Widget buildInflowRoot(TagCardState s) {
         iconBg: const Color(0xFF5ec47a).withOpacity(0.12),
         title: 'True income',
         subtitle: 'Into my own pocket',
-        onTap: () => saveIncome(s),
+        onTap: () {
+          if (s.incomeTypes.isEmpty && !s.loadingIncomeTypes) {
+            s.loadIncomeTypes();
+          }
+          s.setState(() => s.screen = 'income_type');
+        },
         last: true,
-      ),
+      ),  
     ],
   );
 }
@@ -81,6 +86,90 @@ Widget buildInflowNotMine(TagCardState s) {
         onTap: () => loadReceivables(s),
         last: true,
       ),
+    ],
+  );
+}
+
+Widget buildIncomeType(TagCardState s) {
+  if (s.loadingIncomeTypes) {
+    return Column(
+      children: [
+        s.buildHeader(
+            'True income · Ksh ${s.widget.amount.toInt()}',
+            backScreen: 'root'),
+        const SizedBox(height: 24),
+        const Center(
+            child: CircularProgressIndicator(color: tagCardGold)),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      s.buildHeader(
+          'True income · Ksh ${s.widget.amount.toInt()}',
+          backScreen: 'root'),
+      const SizedBox(height: 16),
+      Text('What kind of income?',
+          style: TextStyle(
+              fontSize: 11,
+              color: tagCardWhite.withOpacity(0.5))),
+      const SizedBox(height: 12),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: s.incomeTypes.map((c) {
+          final selected = s.selectedIncomeType == c.name;
+          return GestureDetector(
+            onTap: () =>
+                s.setState(() => s.selectedIncomeType = c.name),
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: selected
+                    ? const Color(0xFF5ec47a).withOpacity(0.2)
+                    : tagCardWhite.withOpacity(0.06),
+                borderRadius: BorderRadius.circular(99),
+                border: Border.all(
+                  color: selected
+                      ? const Color(0xFF5ec47a).withOpacity(0.6)
+                      : tagCardWhite.withOpacity(0.12),
+                  width: 0.5,
+                ),
+              ),
+              child: Text(c.name,
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: selected
+                          ? FontWeight.w600
+                          : FontWeight.w400,
+                      color: selected
+                          ? const Color(0xFF5ec47a)
+                          : tagCardWhite.withOpacity(0.8))),
+            ),
+          );
+        }).toList(),
+      ),
+      const SizedBox(height: 20),
+      // Note field for Other or Family Support
+      if (s.selectedIncomeType == 'Other' ||
+          s.selectedIncomeType == 'Family Support') ...[
+        Text("Add a note (optional)",
+            style: TextStyle(
+                fontSize: 11,
+                color: tagCardWhite.withOpacity(0.5))),
+        const SizedBox(height: 8),
+        s.buildNoteField('e.g. Mum, side job payment'),
+        const SizedBox(height: 16),
+      ],
+      s.buildSaveBtn(
+          'Save',
+          s.selectedIncomeType == null
+              ? null
+              : () => saveIncome(s)),
     ],
   );
 }
@@ -289,12 +378,19 @@ Future<void> saveReceivableMatch(
 }
 
 Future<void> saveIncome(TagCardState s) async {
+  final typeLabel = (s.selectedIncomeType == 'Other' ||
+              s.selectedIncomeType == 'Family Support') &&
+          s.noteController.text.trim().isNotEmpty
+      ? '${s.selectedIncomeType}: ${s.noteController.text.trim()}'
+      : s.selectedIncomeType ?? 'Income';
+
   await s.upsert(TransactionsCompanion(
     txCode: drift.Value(s.widget.txCode),
     amount: drift.Value(s.widget.amount),
     recipient: drift.Value(s.widget.recipient),
     direction: drift.Value('in'),
     type: drift.Value('income'),
+    category: drift.Value(typeLabel),
     balanceAfter: drift.Value(s.widget.balance),
     rawSms: drift.Value(''),
     createdAt: drift.Value(DateTime.now()),

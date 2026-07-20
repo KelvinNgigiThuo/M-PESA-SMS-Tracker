@@ -38,6 +38,11 @@ class TagCardState extends State<TagCard> {
   bool showSuccess = false;
   List<Account> bucketAccounts = [];
   bool loadingAccounts = false;
+  List<Category> expenseCategories = [];
+  bool loadingCategories = false;
+  List<Category> incomeTypes = [];
+  bool loadingIncomeTypes = false;
+  String? selectedIncomeType;
 
   @override
   void dispose() {
@@ -141,6 +146,9 @@ class TagCardState extends State<TagCard> {
       case 'reimbursable':
         return buildReimbursableNote(this);
       case 'expense':
+        if (expenseCategories.isEmpty && !loadingCategories) {
+          loadExpenseCategories();
+        }
         return buildExpense(this);
       case 'inflow_not_mine':
         return buildInflowNotMine(this);
@@ -148,6 +156,8 @@ class TagCardState extends State<TagCard> {
         return buildCustodyReceive(this);
       case 'receivable_match':
         return buildReceivableMatch(this);
+      case 'income_type':
+        return buildIncomeType(this);
       default:
         return isOut
             ? buildOutflowRoot(this)
@@ -347,6 +357,26 @@ class TagCardState extends State<TagCard> {
       loadingAccounts = false;
     });
   } 
+
+  Future<void> loadExpenseCategories() async {
+    if (expenseCategories.isNotEmpty) return;
+    setState(() => loadingCategories = true);
+    final cats = await db.getCategories('out');
+    setState(() {
+      expenseCategories = cats;
+      loadingCategories = false;
+    });
+  }
+
+  Future<void> loadIncomeTypes() async {
+    if (incomeTypes.isNotEmpty) return;
+    setState(() => loadingIncomeTypes = true);
+    final cats = await db.getCategories('in');
+    setState(() {
+      incomeTypes = cats;
+      loadingIncomeTypes = false;
+    });
+  }
 
   Future<void> saveUntagged() async {
     final existing = await (db.select(db.transactions)

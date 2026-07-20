@@ -276,9 +276,20 @@ Widget buildReimbursableNote(TagCardState s) {
 
 // ── Expense picker ────────────────────────────────────────────────────
 Widget buildExpense(TagCardState s) {
-  const categories = [
-    'Food', 'Transport', 'Supplies', 'Bills', 'Airtime', 'Other'
-  ];
+  if (s.loadingCategories) {
+    return Column(
+      children: [
+        s.buildHeader(
+            'True expense · Ksh ${s.widget.amount.toInt()}',
+            backScreen: 'root'),
+        const SizedBox(height: 24),
+        const Center(
+            child: CircularProgressIndicator(color: tagCardGold)),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
@@ -289,11 +300,11 @@ Widget buildExpense(TagCardState s) {
       Wrap(
         spacing: 8,
         runSpacing: 8,
-        children: categories.map((c) {
-          final selected = s.selectedCategory == c;
+        children: s.expenseCategories.map((c) {
+          final selected = s.selectedCategory == c.name;
           return GestureDetector(
             onTap: () =>
-                s.setState(() => s.selectedCategory = c),
+                s.setState(() => s.selectedCategory = c.name),
             child: Container(
               padding: const EdgeInsets.symmetric(
                   horizontal: 14, vertical: 8),
@@ -309,7 +320,7 @@ Widget buildExpense(TagCardState s) {
                   width: 0.5,
                 ),
               ),
-              child: Text(c,
+              child: Text(c.name,
                   style: TextStyle(
                       fontSize: 12,
                       fontWeight: selected
@@ -323,6 +334,16 @@ Widget buildExpense(TagCardState s) {
         }).toList(),
       ),
       const SizedBox(height: 20),
+      // Note field appears when Other is selected
+      if (s.selectedCategory == 'Other') ...[
+        Text("What was this for?",
+            style: TextStyle(
+                fontSize: 11,
+                color: tagCardWhite.withOpacity(0.5))),
+        const SizedBox(height: 8),
+        s.buildNoteField('e.g. Haircut, random purchase'),
+        const SizedBox(height: 16),
+      ],
       s.buildSaveBtn(
           'Save',
           s.selectedCategory == null
@@ -390,13 +411,19 @@ Future<void> saveReimbursable(TagCardState s) async {
 }
 
 Future<void> saveExpense(TagCardState s) async {
+  // If Other selected, append the note to the category name
+  final categoryLabel = s.selectedCategory == 'Other' &&
+          s.noteController.text.trim().isNotEmpty
+      ? 'Other: ${s.noteController.text.trim()}'
+      : s.selectedCategory!;
+
   await s.upsert(TransactionsCompanion(
     txCode: drift.Value(s.widget.txCode),
     amount: drift.Value(s.widget.amount),
     recipient: drift.Value(s.widget.recipient),
     direction: drift.Value('out'),
     type: drift.Value('expense'),
-    category: drift.Value(s.selectedCategory!),
+    category: drift.Value(categoryLabel),
     balanceAfter: drift.Value(s.widget.balance),
     rawSms: drift.Value(''),
     createdAt: drift.Value(DateTime.now()),

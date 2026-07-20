@@ -78,8 +78,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     double zone1Total = 0;
     double zone2Total = 0;
     for (final a in accounts) {
-      final balance = a.manualBalance ??
-          (a.openingBalance + (bucketBalances[a.name] ?? 0.0));
+      double balance;
+      if (a.name == 'M-Pesa') {
+        // M-Pesa live balance always comes from latest SMS
+        balance = mpesaBalance;
+      } else {
+        // All other accounts use manual correction or opening + movements
+        balance = a.manualBalance ??
+            (a.openingBalance + (bucketBalances[a.name] ?? 0.0));
+      }
       if (a.zone == 1) zone1Total += balance;
       if (a.zone == 2) zone2Total += balance;
     }
