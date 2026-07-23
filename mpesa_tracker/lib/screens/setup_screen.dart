@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../database/app_database.dart';
 import '../main.dart';
 import '../services/setup_service.dart';
+import '../widgets/add_account_sheet.dart';
 
 const _green = Color(0xFF1A3C34);
 const _gold = Color(0xFFC9A84C);
@@ -35,17 +36,18 @@ class _SetupScreenState extends State<SetupScreen> {
 
   Future<void> _loadAccounts() async {
     final all = await db.getAllAccounts();
-    final controllers = <int, TextEditingController>{};
     for (final a in all) {
-      controllers[a.id] = TextEditingController(
-        text: a.openingBalance > 0
-            ? a.openingBalance.toStringAsFixed(2)
-            : '',
+      _controllers.putIfAbsent(
+        a.id,
+        () => TextEditingController(
+          text: a.openingBalance > 0
+              ? a.openingBalance.toStringAsFixed(2)
+              : '',
+        ),
       );
     }
     setState(() {
       _accounts = all;
-      _controllers.addAll(controllers);
       _loading = false;
     });
   }
@@ -140,6 +142,7 @@ class _SetupScreenState extends State<SetupScreen> {
                             _buildAccountRow(account),
                           const SizedBox(height: 16),
                         ],
+                      _buildAddAccountButton(),
                     ],
                   ),
                 ),
@@ -208,6 +211,30 @@ class _SetupScreenState extends State<SetupScreen> {
           style: TextStyle(fontSize: 11, color: Colors.grey[400]),
         ),
       ],
+    );
+  }
+
+  Widget _buildAddAccountButton() {
+    return GestureDetector(
+      onTap: () => showAddAccountSheet(context, onAdded: _loadAccounts),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _green.withOpacity(0.3), width: 0.5),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.add, color: _green, size: 16),
+            const SizedBox(width: 8),
+            Text('Add another account (bank, investment, etc.)',
+                style: TextStyle(color: _green, fontSize: 13, fontWeight: FontWeight.w500)),
+          ],
+        ),
+      ),
     );
   }
 

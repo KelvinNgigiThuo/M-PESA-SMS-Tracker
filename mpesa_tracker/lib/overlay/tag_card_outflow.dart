@@ -181,10 +181,11 @@ void _showAddBucket(TagCardState s) {
                   color: tagCardWhite.withOpacity(0.5))),
         ),
         TextButton(
-          onPressed: () {
+          onPressed: () async {
             final name = controller.text.trim();
             if (name.isNotEmpty) {
               Navigator.pop(s.context);
+              await db.addCustomAccount(name, 'custom', 1);
               saveTransfer(s, name);
             }
           },

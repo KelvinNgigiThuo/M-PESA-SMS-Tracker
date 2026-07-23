@@ -36,6 +36,7 @@ class Accounts extends Table {
   DateTimeColumn get manualBalanceSetAt => dateTime().nullable()();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
   BoolColumn get isHidden => boolean().withDefault(const Constant(false))();
+  BoolColumn get isSystem => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime()();
 }
 
@@ -56,7 +57,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -65,21 +66,21 @@ class AppDatabase extends _$AppDatabase {
       await _seedAccounts();
       await _seedCategories();
     },
+    onUpgrade: (m, from, to) async {
+      if (from < 2) {
+        await m.addColumn(accounts, accounts.isSystem);
+      }
+    },
   );
 
   // ── Seeds ─────────────────────────────────────────────────────────
   Future<void> _seedAccounts() async {
     final defaults = [
       ('M-Pesa',          'mpesa',          1),
-      ('Other M-Pesa',    'mpesa',          1),
       ('M-Shwari',        'mobile_savings', 2),
       ('KCB M-Pesa',      'mobile_savings', 2),
       ('M-Shwari Lock',   'mobile_savings', 3),
       ('KCB M-Pesa Lock', 'mobile_savings', 3),
-      ('NCBA',            'bank',           3),
-      ('KCB Bank',        'bank',           3),
-      ('Etica',           'investment',     4),
-      ('Company',         'investment',     4),
     ];
 
     for (final (name, group, zone) in defaults) {
@@ -90,6 +91,7 @@ class AppDatabase extends _$AppDatabase {
         openingBalance: const Value(0.0),
         isActive: const Value(true),
         isHidden: const Value(false),
+        isSystem: const Value(true),
         createdAt: Value(DateTime.now()),
       ));
     }
@@ -250,6 +252,16 @@ class AppDatabase extends _$AppDatabase {
   Future<void> deactivateAccount(int id) =>
       (update(accounts)..where((a) => a.id.equals(id)))
       .write(const AccountsCompanion(isActive: Value(false)));
+
+  Future<List<Account>> getInactiveAccounts() =>
+      (select(accounts)
+        ..where((a) => a.isActive.equals(false))
+        ..orderBy([(a) => OrderingTerm.asc(a.name)]))
+      .get();
+
+  Future<void> reactivateAccount(int id) =>
+      (update(accounts)..where((a) => a.id.equals(id)))
+      .write(const AccountsCompanion(isActive: Value(true)));
 
   // ── Category queries ──────────────────────────────────────────────
   Future<List<Category>> getCategories(String direction) =>

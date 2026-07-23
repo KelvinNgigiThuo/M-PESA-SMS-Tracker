@@ -955,6 +955,21 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _isSystemMeta = const VerificationMeta(
+    'isSystem',
+  );
+  @override
+  late final GeneratedColumn<bool> isSystem = GeneratedColumn<bool>(
+    'is_system',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_system" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -977,6 +992,7 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
     manualBalanceSetAt,
     isActive,
     isHidden,
+    isSystem,
     createdAt,
   ];
   @override
@@ -1055,6 +1071,12 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
         isHidden.isAcceptableOrUnknown(data['is_hidden']!, _isHiddenMeta),
       );
     }
+    if (data.containsKey('is_system')) {
+      context.handle(
+        _isSystemMeta,
+        isSystem.isAcceptableOrUnknown(data['is_system']!, _isSystemMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -1108,6 +1130,10 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
         DriftSqlType.bool,
         data['${effectivePrefix}is_hidden'],
       )!,
+      isSystem: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_system'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -1131,6 +1157,7 @@ class Account extends DataClass implements Insertable<Account> {
   final DateTime? manualBalanceSetAt;
   final bool isActive;
   final bool isHidden;
+  final bool isSystem;
   final DateTime createdAt;
   const Account({
     required this.id,
@@ -1142,6 +1169,7 @@ class Account extends DataClass implements Insertable<Account> {
     this.manualBalanceSetAt,
     required this.isActive,
     required this.isHidden,
+    required this.isSystem,
     required this.createdAt,
   });
   @override
@@ -1160,6 +1188,7 @@ class Account extends DataClass implements Insertable<Account> {
     }
     map['is_active'] = Variable<bool>(isActive);
     map['is_hidden'] = Variable<bool>(isHidden);
+    map['is_system'] = Variable<bool>(isSystem);
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -1179,6 +1208,7 @@ class Account extends DataClass implements Insertable<Account> {
           : Value(manualBalanceSetAt),
       isActive: Value(isActive),
       isHidden: Value(isHidden),
+      isSystem: Value(isSystem),
       createdAt: Value(createdAt),
     );
   }
@@ -1200,6 +1230,7 @@ class Account extends DataClass implements Insertable<Account> {
       ),
       isActive: serializer.fromJson<bool>(json['isActive']),
       isHidden: serializer.fromJson<bool>(json['isHidden']),
+      isSystem: serializer.fromJson<bool>(json['isSystem']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -1216,6 +1247,7 @@ class Account extends DataClass implements Insertable<Account> {
       'manualBalanceSetAt': serializer.toJson<DateTime?>(manualBalanceSetAt),
       'isActive': serializer.toJson<bool>(isActive),
       'isHidden': serializer.toJson<bool>(isHidden),
+      'isSystem': serializer.toJson<bool>(isSystem),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -1230,6 +1262,7 @@ class Account extends DataClass implements Insertable<Account> {
     Value<DateTime?> manualBalanceSetAt = const Value.absent(),
     bool? isActive,
     bool? isHidden,
+    bool? isSystem,
     DateTime? createdAt,
   }) => Account(
     id: id ?? this.id,
@@ -1245,6 +1278,7 @@ class Account extends DataClass implements Insertable<Account> {
         : this.manualBalanceSetAt,
     isActive: isActive ?? this.isActive,
     isHidden: isHidden ?? this.isHidden,
+    isSystem: isSystem ?? this.isSystem,
     createdAt: createdAt ?? this.createdAt,
   );
   Account copyWithCompanion(AccountsCompanion data) {
@@ -1264,6 +1298,7 @@ class Account extends DataClass implements Insertable<Account> {
           : this.manualBalanceSetAt,
       isActive: data.isActive.present ? data.isActive.value : this.isActive,
       isHidden: data.isHidden.present ? data.isHidden.value : this.isHidden,
+      isSystem: data.isSystem.present ? data.isSystem.value : this.isSystem,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -1280,6 +1315,7 @@ class Account extends DataClass implements Insertable<Account> {
           ..write('manualBalanceSetAt: $manualBalanceSetAt, ')
           ..write('isActive: $isActive, ')
           ..write('isHidden: $isHidden, ')
+          ..write('isSystem: $isSystem, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -1296,6 +1332,7 @@ class Account extends DataClass implements Insertable<Account> {
     manualBalanceSetAt,
     isActive,
     isHidden,
+    isSystem,
     createdAt,
   );
   @override
@@ -1311,6 +1348,7 @@ class Account extends DataClass implements Insertable<Account> {
           other.manualBalanceSetAt == this.manualBalanceSetAt &&
           other.isActive == this.isActive &&
           other.isHidden == this.isHidden &&
+          other.isSystem == this.isSystem &&
           other.createdAt == this.createdAt);
 }
 
@@ -1324,6 +1362,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
   final Value<DateTime?> manualBalanceSetAt;
   final Value<bool> isActive;
   final Value<bool> isHidden;
+  final Value<bool> isSystem;
   final Value<DateTime> createdAt;
   const AccountsCompanion({
     this.id = const Value.absent(),
@@ -1335,6 +1374,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     this.manualBalanceSetAt = const Value.absent(),
     this.isActive = const Value.absent(),
     this.isHidden = const Value.absent(),
+    this.isSystem = const Value.absent(),
     this.createdAt = const Value.absent(),
   });
   AccountsCompanion.insert({
@@ -1347,6 +1387,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     this.manualBalanceSetAt = const Value.absent(),
     this.isActive = const Value.absent(),
     this.isHidden = const Value.absent(),
+    this.isSystem = const Value.absent(),
     required DateTime createdAt,
   }) : name = Value(name),
        group = Value(group),
@@ -1361,6 +1402,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     Expression<DateTime>? manualBalanceSetAt,
     Expression<bool>? isActive,
     Expression<bool>? isHidden,
+    Expression<bool>? isSystem,
     Expression<DateTime>? createdAt,
   }) {
     return RawValuesInsertable({
@@ -1374,6 +1416,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
         'manual_balance_set_at': manualBalanceSetAt,
       if (isActive != null) 'is_active': isActive,
       if (isHidden != null) 'is_hidden': isHidden,
+      if (isSystem != null) 'is_system': isSystem,
       if (createdAt != null) 'created_at': createdAt,
     });
   }
@@ -1388,6 +1431,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     Value<DateTime?>? manualBalanceSetAt,
     Value<bool>? isActive,
     Value<bool>? isHidden,
+    Value<bool>? isSystem,
     Value<DateTime>? createdAt,
   }) {
     return AccountsCompanion(
@@ -1400,6 +1444,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
       manualBalanceSetAt: manualBalanceSetAt ?? this.manualBalanceSetAt,
       isActive: isActive ?? this.isActive,
       isHidden: isHidden ?? this.isHidden,
+      isSystem: isSystem ?? this.isSystem,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -1436,6 +1481,9 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     if (isHidden.present) {
       map['is_hidden'] = Variable<bool>(isHidden.value);
     }
+    if (isSystem.present) {
+      map['is_system'] = Variable<bool>(isSystem.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -1454,6 +1502,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
           ..write('manualBalanceSetAt: $manualBalanceSetAt, ')
           ..write('isActive: $isActive, ')
           ..write('isHidden: $isHidden, ')
+          ..write('isSystem: $isSystem, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -2330,6 +2379,7 @@ typedef $$AccountsTableCreateCompanionBuilder =
       Value<DateTime?> manualBalanceSetAt,
       Value<bool> isActive,
       Value<bool> isHidden,
+      Value<bool> isSystem,
       required DateTime createdAt,
     });
 typedef $$AccountsTableUpdateCompanionBuilder =
@@ -2343,6 +2393,7 @@ typedef $$AccountsTableUpdateCompanionBuilder =
       Value<DateTime?> manualBalanceSetAt,
       Value<bool> isActive,
       Value<bool> isHidden,
+      Value<bool> isSystem,
       Value<DateTime> createdAt,
     });
 
@@ -2397,6 +2448,11 @@ class $$AccountsTableFilterComposer
 
   ColumnFilters<bool> get isHidden => $composableBuilder(
     column: $table.isHidden,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isSystem => $composableBuilder(
+    column: $table.isSystem,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2460,6 +2516,11 @@ class $$AccountsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get isSystem => $composableBuilder(
+    column: $table.isSystem,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -2508,6 +2569,9 @@ class $$AccountsTableAnnotationComposer
   GeneratedColumn<bool> get isHidden =>
       $composableBuilder(column: $table.isHidden, builder: (column) => column);
 
+  GeneratedColumn<bool> get isSystem =>
+      $composableBuilder(column: $table.isSystem, builder: (column) => column);
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 }
@@ -2549,6 +2613,7 @@ class $$AccountsTableTableManager
                 Value<DateTime?> manualBalanceSetAt = const Value.absent(),
                 Value<bool> isActive = const Value.absent(),
                 Value<bool> isHidden = const Value.absent(),
+                Value<bool> isSystem = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => AccountsCompanion(
                 id: id,
@@ -2560,6 +2625,7 @@ class $$AccountsTableTableManager
                 manualBalanceSetAt: manualBalanceSetAt,
                 isActive: isActive,
                 isHidden: isHidden,
+                isSystem: isSystem,
                 createdAt: createdAt,
               ),
           createCompanionCallback:
@@ -2573,6 +2639,7 @@ class $$AccountsTableTableManager
                 Value<DateTime?> manualBalanceSetAt = const Value.absent(),
                 Value<bool> isActive = const Value.absent(),
                 Value<bool> isHidden = const Value.absent(),
+                Value<bool> isSystem = const Value.absent(),
                 required DateTime createdAt,
               }) => AccountsCompanion.insert(
                 id: id,
@@ -2584,6 +2651,7 @@ class $$AccountsTableTableManager
                 manualBalanceSetAt: manualBalanceSetAt,
                 isActive: isActive,
                 isHidden: isHidden,
+                isSystem: isSystem,
                 createdAt: createdAt,
               ),
           withReferenceMapper: (p0) => p0
