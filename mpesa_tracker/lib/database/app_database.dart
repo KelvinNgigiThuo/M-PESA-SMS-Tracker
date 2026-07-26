@@ -49,6 +49,10 @@ class Categories extends Table {
   BoolColumn get isSystem => boolean().withDefault(const Constant(false))();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+  // group: only meaningful for direction == 'in' — 'true_income' | 'other'
+  TextColumn get group => text().nullable()();
+  // parentId: only meaningful for direction == 'out' — self-references Categories.id
+  IntColumn get parentId => integer().nullable()();
   DateTimeColumn get createdAt => dateTime()();
 }
 
@@ -57,7 +61,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -69,6 +73,12 @@ class AppDatabase extends _$AppDatabase {
     onUpgrade: (m, from, to) async {
       if (from < 2) {
         await m.addColumn(accounts, accounts.isSystem);
+      }
+      if (from < 3) {
+        await m.addColumn(categories, categories.group);
+      }
+      if (from < 4) {
+        await m.addColumn(categories, categories.parentId);
       }
     },
   );
@@ -99,40 +109,81 @@ class AppDatabase extends _$AppDatabase {
 
   Future<void> _seedCategories() async {
     final outCategories = [
-      ('Food',      true,  0),
-      ('Transport', true,  1),
-      ('Bills',     true,  2),
-      ('Supplies',  true,  3),
-      ('Airtime',   true,  4),
-      ('Other',     true,  5),
+      'Food',
+      'Transport',
+      'Bills',
+      'Supplies',
+      'Airtime',
+      'Clothing',
+      'Grooming',
+      'Gift',
+      'Other',
     ];
 
-    final inCategories = [
-      ('Freelance',       true,  0),
-      ('Business',        true,  1),
-      ('Family Support',  false, 2),
-      ('Gift',            false, 3),
-      ('Other',           true,  4),
+    final outSubcategories = {
+      'Food':      ['Breakfast', 'Lunch', 'Supper', 'Snack'],
+      'Transport': ['Fueling', 'Service', 'Public'],
+    };
+
+    final trueIncomeCategories = [
+      ('Salary',           0),
+      ('Business profit',  1),
+      ('Debt repayment',   2),
     ];
 
-    for (final (name, isSystem, sort) in outCategories) {
-      await into(categories).insert(CategoriesCompanion(
+    final otherIncomeCategories = [
+      ('Family Support',  0),
+      ('Gift',             1),
+      ('Other',            2),
+    ];
+
+    for (var i = 0; i < outCategories.length; i++) {
+      final name = outCategories[i];
+      final parentId = await into(categories).insert(CategoriesCompanion(
         name: Value(name),
         direction: const Value('out'),
-        isSystem: Value(isSystem),
+        isSystem: const Value(false),
+        isActive: const Value(true),
+        sortOrder: Value(i),
+        createdAt: Value(DateTime.now()),
+      ));
+
+      final children = outSubcategories[name];
+      if (children != null) {
+        for (var j = 0; j < children.length; j++) {
+          await into(categories).insert(CategoriesCompanion(
+            name: Value(children[j]),
+            direction: const Value('out'),
+            isSystem: const Value(false),
+            isActive: const Value(true),
+            sortOrder: Value(j),
+            parentId: Value(parentId),
+            createdAt: Value(DateTime.now()),
+          ));
+        }
+      }
+    }
+
+    for (final (name, sort) in trueIncomeCategories) {
+      await into(categories).insert(CategoriesCompanion(
+        name: Value(name),
+        direction: const Value('in'),
+        isSystem: const Value(false),
         isActive: const Value(true),
         sortOrder: Value(sort),
+        group: const Value('true_income'),
         createdAt: Value(DateTime.now()),
       ));
     }
 
-    for (final (name, isSystem, sort) in inCategories) {
+    for (final (name, sort) in otherIncomeCategories) {
       await into(categories).insert(CategoriesCompanion(
         name: Value(name),
         direction: const Value('in'),
-        isSystem: Value(isSystem),
+        isSystem: const Value(false),
         isActive: const Value(true),
         sortOrder: Value(sort),
+        group: const Value('other'),
         createdAt: Value(DateTime.now()),
       ));
     }
@@ -141,6 +192,15 @@ class AppDatabase extends _$AppDatabase {
   // ── Transaction queries ───────────────────────────────────────────
   Future<int> insertTransaction(TransactionsCompanion t) =>
       into(transactions).insert(t);
+
+  Future<void> clearAllTransactions() => delete(transactions).go();
+
+  Future<void> resetAllAccountBalances() =>
+      update(accounts).write(const AccountsCompanion(
+        openingBalance: Value(0.0),
+        manualBalance: Value(null),
+        manualBalanceSetAt: Value(null),
+      ));
 
   Future<List<Transaction>> getUntagged() =>
       (select(transactions)
@@ -264,22 +324,27 @@ class AppDatabase extends _$AppDatabase {
       .write(const AccountsCompanion(isActive: Value(true)));
 
   // ── Category queries ──────────────────────────────────────────────
-  Future<List<Category>> getCategories(String direction) =>
+  Future<List<Category>> getCategories(String direction, {String? group}) =>
       (select(categories)
-        ..where((c) =>
-            c.direction.equals(direction) &
-            c.isActive.equals(true))
+        ..where((c) {
+          final base =
+              c.direction.equals(direction) & c.isActive.equals(true);
+          return group == null ? base : base & c.group.equals(group);
+        })
         ..orderBy([(c) => OrderingTerm.asc(c.sortOrder)]))
       .get();
 
   Future<void> addCategory(
-      String name, String direction, bool isSystem) =>
+      String name, String direction, bool isSystem,
+      {String? group, int? parentId}) =>
       into(categories).insert(CategoriesCompanion(
         name: Value(name),
         direction: Value(direction),
         isSystem: Value(isSystem),
         isActive: const Value(true),
         sortOrder: const Value(99),
+        group: Value(group),
+        parentId: Value(parentId),
         createdAt: Value(DateTime.now()),
       ));
 
@@ -290,6 +355,12 @@ class AppDatabase extends _$AppDatabase {
   Future<void> deactivateCategory(int id) =>
       (update(categories)..where((c) => c.id.equals(id)))
       .write(const CategoriesCompanion(isActive: Value(false)));
+
+  Future<void> deactivateCategoryAndChildren(int id) async {
+    await deactivateCategory(id);
+    await (update(categories)..where((c) => c.parentId.equals(id)))
+        .write(const CategoriesCompanion(isActive: Value(false)));
+  }
 }
 
 LazyDatabase _openConnection() {

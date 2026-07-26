@@ -1,10 +1,15 @@
 package com.kelvin.mpesa.mpesa_tracker
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.util.Log
 import android.view.Gravity
 import android.view.LayoutInflater
@@ -12,11 +17,14 @@ import android.view.MotionEvent
 import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.app.NotificationCompat
 
 class OverlayService : Service() {
 
     private lateinit var windowManager: WindowManager
     private var bubbleView: android.view.View? = null
+    private val dismissHandler = Handler(Looper.getMainLooper())
+    private var dismissRunnable: Runnable? = null
 
     companion object {
         const val EXTRA_AMOUNT = "amount"
@@ -29,9 +37,46 @@ class OverlayService : Service() {
         const val EXTRA_ACCOUNT_REF = "accountRef"
         const val EXTRA_SECONDARY_BALANCE = "secondaryBalance"
         const val EXTRA_SECONDARY_ACCOUNT = "secondaryAccount"
+
+        private const val NOTIFICATION_CHANNEL_ID = "overlay_bubble"
+        private const val NOTIFICATION_ID = 1
+        private const val BUBBLE_TIMEOUT_MS = 90_000L
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        createNotificationChannel()
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val manager = getSystemService(NotificationManager::class.java)
+            val channel = NotificationChannel(
+                NOTIFICATION_CHANNEL_ID,
+                "Transaction tagging",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Shown briefly while a transaction is waiting to be tagged"
+                setSound(null, null)
+            }
+            manager.createNotificationChannel(channel)
+        }
+    }
+
+    private fun buildNotification(): android.app.Notification {
+        return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+            .setContentTitle("Dhahiri")
+            .setContentText("Tap to tag your last transaction")
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setOngoing(true)
+            .setSilent(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        startForeground(NOTIFICATION_ID, buildNotification())
+
         val amount = intent?.getDoubleExtra(EXTRA_AMOUNT, 0.0) ?: 0.0
         val recipient = intent?.getStringExtra(EXTRA_RECIPIENT) ?: ""
         val direction = intent?.getStringExtra(EXTRA_DIRECTION) ?: "out"
@@ -50,6 +95,22 @@ class OverlayService : Service() {
         )
 
         return START_NOT_STICKY
+    }
+
+    private fun scheduleAutoDismiss() {
+        dismissRunnable?.let { dismissHandler.removeCallbacks(it) }
+        val runnable = Runnable {
+            Log.d("OverlayService", "Bubble timed out — dismissing")
+            removeBubble()
+            stopSelf()
+        }
+        dismissRunnable = runnable
+        dismissHandler.postDelayed(runnable, BUBBLE_TIMEOUT_MS)
+    }
+
+    private fun cancelAutoDismiss() {
+        dismissRunnable?.let { dismissHandler.removeCallbacks(it) }
+        dismissRunnable = null
     }
 
     private fun showBubble(
@@ -146,6 +207,7 @@ class OverlayService : Service() {
                             putExtra("fromBubble", true)
                         }
                         this@OverlayService.startActivity(intent)
+                        cancelAutoDismiss()
                         removeBubble()
                         stopSelf()
                     }
@@ -156,6 +218,7 @@ class OverlayService : Service() {
         }
 
         windowManager.addView(bubbleView, params)
+        scheduleAutoDismiss()
     }
 
     private fun removeBubble() {
@@ -168,6 +231,7 @@ class OverlayService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        cancelAutoDismiss()
         removeBubble()
         super.onDestroy()
     }

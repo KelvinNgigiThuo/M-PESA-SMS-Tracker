@@ -1,9 +1,13 @@
 package com.kelvin.mpesa.mpesa_tracker
 
+import android.content.ActivityNotFoundException
+import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
 import android.Manifest
@@ -26,14 +30,21 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        val missingPermissions = mutableListOf<String>()
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECEIVE_SMS)
             != PackageManager.PERMISSION_GRANTED) {
+            missingPermissions.add(Manifest.permission.RECEIVE_SMS)
+            missingPermissions.add(Manifest.permission.READ_SMS)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+            != PackageManager.PERMISSION_GRANTED) {
+            missingPermissions.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        if (missingPermissions.isNotEmpty()) {
             ActivityCompat.requestPermissions(
                 this,
-                arrayOf(
-                    Manifest.permission.RECEIVE_SMS,
-                    Manifest.permission.READ_SMS
-                ),
+                missingPermissions.toTypedArray(),
                 1001
             )
         }
@@ -47,6 +58,20 @@ class MainActivity : FlutterActivity() {
             )
         }
 
+        val powerManager = getSystemService(POWER_SERVICE) as PowerManager
+        if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
+            try {
+                startActivity(
+                    Intent(
+                        Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                        Uri.parse("package:$packageName")
+                    )
+                )
+            } catch (e: ActivityNotFoundException) {
+                Log.w("MainActivity", "Battery optimization exemption screen unavailable", e)
+            }
+        }
+
         if (intent?.getBooleanExtra("fromBubble", false) == true) {
             pendingData = extractTransactionData(intent)
         }
@@ -58,15 +83,70 @@ class MainActivity : FlutterActivity() {
             flutterEngine.dartExecutor.binaryMessenger, CHANNEL
         )
         channel?.setMethodCallHandler { call, result ->
-            if (call.method == "flutterReady") {
-                flutterReady = true
-                Log.d("MainActivity", "Flutter is ready")
-                pendingData?.let {
-                    sendToFlutter(it)
-                    pendingData = null
+            when (call.method) {
+                "flutterReady" -> {
+                    flutterReady = true
+                    Log.d("MainActivity", "Flutter is ready")
+                    pendingData?.let {
+                        sendToFlutter(it)
+                        pendingData = null
+                    }
+                    result.success(null)
                 }
-                result.success(null)
+                "openBackgroundSettings" -> {
+                    openBackgroundSettings()
+                    result.success(null)
+                }
+                else -> result.notImplemented()
             }
+        }
+    }
+
+    /**
+     * Best-effort: open the OEM's background/autostart management screen.
+     * ColorOS (Oppo/Realme) hides this behind a vendor-specific activity that
+     * varies by version — try known component names, then fall back to the
+     * generic app-details settings page so the user can find it manually.
+     */
+    private fun openBackgroundSettings() {
+        val manufacturer = Build.MANUFACTURER.lowercase()
+        if (manufacturer.contains("oppo") || manufacturer.contains("realme")) {
+            val candidates = listOf(
+                ComponentName(
+                    "com.coloros.safecenter",
+                    "com.coloros.safecenter.startupapp.StartupAppListActivity"
+                ),
+                ComponentName(
+                    "com.coloros.safecenter",
+                    "com.coloros.safecenter.permission.startup.StartupAppListActivity"
+                ),
+                ComponentName(
+                    "com.oppo.safe",
+                    "com.oppo.safe.permission.startup.StartupAppListActivity"
+                )
+            )
+            for (component in candidates) {
+                try {
+                    startActivity(Intent().apply {
+                        this.component = component
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    })
+                    return
+                } catch (e: ActivityNotFoundException) {
+                    // Try the next candidate
+                }
+            }
+        }
+
+        try {
+            startActivity(
+                Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:$packageName")
+                )
+            )
+        } catch (e: ActivityNotFoundException) {
+            Log.w("MainActivity", "No settings screen available to open", e)
         }
     }
 

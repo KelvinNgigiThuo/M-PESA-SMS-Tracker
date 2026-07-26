@@ -74,23 +74,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     double receivables = 0;
     final Map<String, double> poolMap = {};
 
-    // Zone totals for dashboard headline
-    double zone1Total = 0;
-    double zone2Total = 0;
-    for (final a in accounts) {
-      double balance;
-      if (a.name == 'M-Pesa') {
-        // M-Pesa live balance always comes from latest SMS
-        balance = mpesaBalance;
-      } else {
-        // All other accounts use manual correction or opening + movements
-        balance = a.manualBalance ??
-            (a.openingBalance + (bucketBalances[a.name] ?? 0.0));
-      }
-      if (a.zone == 1) zone1Total += balance;
-      if (a.zone == 2) zone2Total += balance;
-    }
-
     // Load buffer target from prefs
     final prefs = await SharedPreferences.getInstance();
     final bufferTarget = prefs.getDouble('buffer_target') ?? 10000;
@@ -115,6 +98,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
       if (t.type == 'receivable_create') receivables += t.amount;
       if (t.type == 'receivable_clear') receivables -= t.amount;
+    }
+
+    // Zone totals for dashboard headline — mpesaBalance must already be
+    // resolved above, since the M-Pesa account's live balance comes from it.
+    double zone1Total = 0;
+    double zone2Total = 0;
+    for (final a in accounts) {
+      double balance;
+      if (a.name == 'M-Pesa') {
+        balance = mpesaBalance > 0 ? mpesaBalance : a.openingBalance;
+      } else {
+        // All other accounts use manual correction or opening + movements
+        balance = a.manualBalance ??
+            (a.openingBalance + (bucketBalances[a.name] ?? 0.0));
+      }
+      if (a.zone == 1) zone1Total += balance;
+      if (a.zone == 2) zone2Total += balance;
     }
 
     double openingTotal = 0;
@@ -159,7 +159,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _mpesaBalance + _bucketTotal - _custodyHeld + _openReceivablesTotal;
 
   double get _availableToDeploy =>
-      _zone1Total - _custodyHeld;
+      _zone1Total + _zone2Total;
 
   double get _bufferPercent =>
       (_zone2Total / _bufferTarget).clamp(0.0, 1.0);
@@ -292,7 +292,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                'Zone 1 − custody held',
+                'Operating + Reserves (Zone 1 + Zone 2)',
                 style: TextStyle(
                     fontSize: 10,
                     color: Colors.white.withOpacity(0.3)),
@@ -602,7 +602,7 @@ Widget _buildTxRow(Transaction t) {
       case 'custody_spend':     return 'Custody spend';
       case 'custody_receive':   return 'Custody received';
       case 'receivable_create': return 'Fronted — pay me back';
-      case 'receivable_clear':  return 'Receivable cleared';
+      case 'receivable_clear':  return 'Debt repayment';
       case 'expense':           return 'Expense';
       case 'income':            return 'Income';
       case 'fee':               return 'Transaction fee';

@@ -3,7 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'setup_screen.dart';
 import 'categories_settings_screen.dart';
-import 'accounts_screen.dart';
+import 'manage_accounts_screen.dart';
+import '../main.dart';
 
 const _green = Color(0xFF1A3C34);
 const _gold = Color(0xFFC9A84C);
@@ -16,6 +17,8 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  static const _channel = MethodChannel('com.kelvin.mpesa/overlay');
+
   double _bufferTarget = 10000;
 
   @override
@@ -110,8 +113,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   subtitle: 'Add, rename or move accounts between zones',
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
-                        builder: (_) => const AccountsScreen()),
+                        builder: (_) => const ManageAccountsScreen()),
                   ),
+                ),
+
+                const SizedBox(height: 8),
+
+                // ── Reliability section ───────────────────────────────
+                _sectionTitle('Reliability'),
+                _settingRow(
+                  icon: Icons.battery_charging_full_outlined,
+                  label: 'Keep running in background',
+                  subtitle: 'Prevents the phone from blocking SMS detection',
+                  onTap: () => _showBackgroundReliabilitySheet(),
                 ),
 
                 const SizedBox(height: 8),
@@ -297,6 +311,84 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  // ── Background reliability sheet ───────────────────────────────────
+  void _showBackgroundReliabilitySheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        margin: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: _green,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 3,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Keep running in background',
+              style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Some phones aggressively stop apps running in the background to save '
+              'battery, which can block M-Pesa message detection. Allowing Dhahiri '
+              'to auto-start and ignoring battery optimization for it fixes this — '
+              'it only wakes up when a new M-Pesa message arrives, so it won\'t '
+              'drain your battery.',
+              style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.white.withOpacity(0.5),
+                  height: 1.5),
+            ),
+            const SizedBox(height: 20),
+            GestureDetector(
+              onTap: () async {
+                Navigator.pop(ctx);
+                try {
+                  await _channel.invokeMethod('openBackgroundSettings');
+                } catch (_) {}
+              },
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                decoration: BoxDecoration(
+                  color: _gold,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  'Open settings',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: _green),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // ── Clear data confirm ────────────────────────────────────────────
   void _showClearDataConfirm() {
     showDialog(
@@ -323,9 +415,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     color: Colors.white.withOpacity(0.5))),
           ),
           TextButton(
-            onPressed: () {
-              // Clear data logic — Phase 5
-              Navigator.pop(context);
+            onPressed: () async {
+              await db.clearAllTransactions();
+              await db.resetAllAccountBalances();
+              if (mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                        'All transactions cleared and balances reset.'),
+                  ),
+                );
+              }
             },
             child: const Text('Clear',
                 style: TextStyle(

@@ -291,6 +291,48 @@ Widget buildExpense(TagCardState s) {
     );
   }
 
+  final topLevel =
+      s.expenseCategories.where((c) => c.parentId == null).toList();
+  final subcategories = s.selectedCategoryId == null
+      ? <Category>[]
+      : s.expenseCategories
+          .where((c) => c.parentId == s.selectedCategoryId)
+          .toList();
+  final needsSubcategory =
+      s.selectedCategoryId != null && subcategories.isNotEmpty;
+  final canSave = s.selectedCategory != null &&
+      (!needsSubcategory || s.selectedSubcategory != null);
+
+  Widget buildChip(String label, bool selected, Color color, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+            horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected
+              ? color.withOpacity(0.2)
+              : tagCardWhite.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(99),
+          border: Border.all(
+            color: selected
+                ? color.withOpacity(0.6)
+                : tagCardWhite.withOpacity(0.12),
+            width: 0.5,
+          ),
+        ),
+        child: Text(label,
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight:
+                    selected ? FontWeight.w600 : FontWeight.w400,
+                color: selected
+                    ? color
+                    : tagCardWhite.withOpacity(0.8))),
+      ),
+    );
+  }
+
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
@@ -301,42 +343,36 @@ Widget buildExpense(TagCardState s) {
       Wrap(
         spacing: 8,
         runSpacing: 8,
-        children: s.expenseCategories.map((c) {
-          final selected = s.selectedCategory == c.name;
-          return GestureDetector(
-            onTap: () =>
-                s.setState(() => s.selectedCategory = c.name),
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: selected
-                    ? const Color(0xFFe87070).withOpacity(0.2)
-                    : tagCardWhite.withOpacity(0.06),
-                borderRadius: BorderRadius.circular(99),
-                border: Border.all(
-                  color: selected
-                      ? const Color(0xFFe87070).withOpacity(0.6)
-                      : tagCardWhite.withOpacity(0.12),
-                  width: 0.5,
-                ),
-              ),
-              child: Text(c.name,
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: selected
-                          ? FontWeight.w600
-                          : FontWeight.w400,
-                      color: selected
-                          ? const Color(0xFFe87070)
-                          : tagCardWhite.withOpacity(0.8))),
-            ),
-          );
+        children: topLevel.map((c) {
+          final selected = s.selectedCategoryId == c.id;
+          return buildChip(c.name, selected, const Color(0xFFe87070),
+              () => s.setState(() {
+                    s.selectedCategory = c.name;
+                    s.selectedCategoryId = c.id;
+                    s.selectedSubcategory = null;
+                  }));
         }).toList(),
       ),
+      if (subcategories.isNotEmpty) ...[
+        const SizedBox(height: 16),
+        Text('Which one?',
+            style: TextStyle(
+                fontSize: 11,
+                color: tagCardWhite.withOpacity(0.5))),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: subcategories.map((c) {
+            final selected = s.selectedSubcategory == c.name;
+            return buildChip(c.name, selected, const Color(0xFFe87070),
+                () => s.setState(() => s.selectedSubcategory = c.name));
+          }).toList(),
+        ),
+      ],
       const SizedBox(height: 20),
-      // Note field appears when Other is selected
-      if (s.selectedCategory == 'Other') ...[
+      // Note field appears when Other is selected (no subcategories)
+      if (s.selectedCategory == 'Other' && !needsSubcategory) ...[
         Text("What was this for?",
             style: TextStyle(
                 fontSize: 11,
@@ -347,9 +383,7 @@ Widget buildExpense(TagCardState s) {
       ],
       s.buildSaveBtn(
           'Save',
-          s.selectedCategory == null
-              ? null
-              : () => saveExpense(s)),
+          canSave ? () => saveExpense(s) : null),
     ],
   );
 }
@@ -412,11 +446,12 @@ Future<void> saveReimbursable(TagCardState s) async {
 }
 
 Future<void> saveExpense(TagCardState s) async {
-  // If Other selected, append the note to the category name
-  final categoryLabel = s.selectedCategory == 'Other' &&
-          s.noteController.text.trim().isNotEmpty
-      ? 'Other: ${s.noteController.text.trim()}'
-      : s.selectedCategory!;
+  final categoryLabel = s.selectedSubcategory != null
+      ? '${s.selectedCategory}: ${s.selectedSubcategory}'
+      : s.selectedCategory == 'Other' &&
+              s.noteController.text.trim().isNotEmpty
+          ? 'Other: ${s.noteController.text.trim()}'
+          : s.selectedCategory!;
 
   await s.upsert(TransactionsCompanion(
     txCode: drift.Value(s.widget.txCode),

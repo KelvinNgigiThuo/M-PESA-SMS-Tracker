@@ -32,6 +32,8 @@ class TagCard extends StatefulWidget {
 class TagCardState extends State<TagCard> {
   String screen = 'root';
   String? selectedCategory;
+  int? selectedCategoryId;
+  String? selectedSubcategory;
   final noteController = TextEditingController();
   List<Transaction> receivables = [];
   bool loadingReceivables = false;
@@ -40,8 +42,10 @@ class TagCardState extends State<TagCard> {
   bool loadingAccounts = false;
   List<Category> expenseCategories = [];
   bool loadingCategories = false;
-  List<Category> incomeTypes = [];
-  bool loadingIncomeTypes = false;
+  List<Category> trueIncomeCategories = [];
+  bool loadingTrueIncome = false;
+  List<Category> otherIncomeCategories = [];
+  bool loadingOtherIncome = false;
   String? selectedIncomeType;
 
   @override
@@ -150,11 +154,9 @@ class TagCardState extends State<TagCard> {
           loadExpenseCategories();
         }
         return buildExpense(this);
-      case 'inflow_not_mine':
-        return buildInflowNotMine(this);
       case 'custody_receive':
         return buildCustodyReceive(this);
-      case 'receivable_match':
+      case 'debt_repayment_match':
         return buildReceivableMatch(this);
       case 'income_type':
         return buildIncomeType(this);
@@ -368,13 +370,23 @@ class TagCardState extends State<TagCard> {
     });
   }
 
-  Future<void> loadIncomeTypes() async {
-    if (incomeTypes.isNotEmpty) return;
-    setState(() => loadingIncomeTypes = true);
-    final cats = await db.getCategories('in');
+  Future<void> loadTrueIncomeCategories() async {
+    if (trueIncomeCategories.isNotEmpty) return;
+    setState(() => loadingTrueIncome = true);
+    final cats = await db.getCategories('in', group: 'true_income');
     setState(() {
-      incomeTypes = cats;
-      loadingIncomeTypes = false;
+      trueIncomeCategories = cats;
+      loadingTrueIncome = false;
+    });
+  }
+
+  Future<void> loadOtherIncomeCategories() async {
+    if (otherIncomeCategories.isNotEmpty) return;
+    setState(() => loadingOtherIncome = true);
+    final cats = await db.getCategories('in', group: 'other');
+    setState(() {
+      otherIncomeCategories = cats;
+      loadingOtherIncome = false;
     });
   }
 

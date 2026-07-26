@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.provider.Telephony
 import android.util.Log
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -63,6 +64,6 @@ class SmsReceiver : BroadcastReceiver() {
             putExtra(OverlayService.EXTRA_SECONDARY_BALANCE, parsed.secondaryBalance)
             putExtra(OverlayService.EXTRA_SECONDARY_ACCOUNT, parsed.secondaryAccount)
         }
-        context.startService(intent)
+        ContextCompat.startForegroundService(context, intent)
     }
 }

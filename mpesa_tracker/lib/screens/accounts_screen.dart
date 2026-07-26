@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import '../database/app_database.dart';
 import '../main.dart';
 import '../widgets/money_text.dart';
-import '../widgets/add_account_sheet.dart';
+import '../widgets/add_account_sheet.dart' show zoneInfo;
 
 const _green = Color(0xFF1A3C34);
 const _gold = Color(0xFFC9A84C);
@@ -20,8 +20,12 @@ class _AccountsScreenState extends State<AccountsScreen> {
   Map<String, double> _bucketBalances = {};
   double _mpesaLiveBalance = 0;
   bool _loading = true;
+  Set<int> _hiddenAccountIds = {};
 
   static const _zoneInfo = zoneInfo;
+
+  bool get _allHidden =>
+      _accounts.isNotEmpty && _hiddenAccountIds.length == _accounts.length;
 
   @override
   void initState() {
@@ -78,6 +82,23 @@ class _AccountsScreenState extends State<AccountsScreen> {
     return total;
   }
 
+  void _toggleAll() {
+    setState(() {
+      _hiddenAccountIds =
+          _allHidden ? {} : _accounts.map((a) => a.id).toSet();
+    });
+  }
+
+  void _toggleAccount(int id) {
+    setState(() {
+      if (_hiddenAccountIds.contains(id)) {
+        _hiddenAccountIds.remove(id);
+      } else {
+        _hiddenAccountIds.add(id);
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final grouped = <int, List<Account>>{};
@@ -102,11 +123,6 @@ class _AccountsScreenState extends State<AccountsScreen> {
                         for (var zone = 1; zone <= 4; zone++)
                           if (grouped.containsKey(zone))
                             _buildZoneSection(zone, grouped[zone]!),
-                        const SizedBox(height: 16),
-                        _buildAddAccountButton(),
-                        const SizedBox(height: 8),
-                        _buildHiddenAccountsLink(),
-                        const SizedBox(height: 16),
                       ]),
                     ),
                   ),
@@ -118,25 +134,35 @@ class _AccountsScreenState extends State<AccountsScreen> {
 
   Widget _buildHeader() {
     return Container(
-      decoration: BoxDecoration(
-        color: _green,
-        borderRadius: const BorderRadius.only(
-          bottomLeft: Radius.circular(28),
-          bottomRight: Radius.circular(28),
-        ),
-      ),
+      color: _green,
+      width: double.infinity,
       padding: const EdgeInsets.fromLTRB(20, 56, 20, 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'MY MONEY',
-            style: TextStyle(
-              fontSize: 9,
-              color: _gold.withOpacity(0.6),
-              letterSpacing: 2,
-              fontWeight: FontWeight.w600,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'MY MONEY',
+                style: TextStyle(
+                  fontSize: 9,
+                  color: _gold.withOpacity(0.6),
+                  letterSpacing: 2,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              GestureDetector(
+                onTap: _toggleAll,
+                child: Icon(
+                  _allHidden
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined,
+                  color: _gold.withOpacity(0.5),
+                  size: 16,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
           Text(
@@ -146,6 +172,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
           const SizedBox(height: 4),
           MoneyText(
             'Ksh ${_trueNetWorth.toStringAsFixed(2)}',
+            hidden: _allHidden,
             style: const TextStyle(
               fontSize: 30,
               fontWeight: FontWeight.w700,
@@ -206,6 +233,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
   Widget _buildAccountCard(Account account) {
     final balance = _balanceFor(account);
     final hasManual = account.manualBalance != null;
+    final hidden = _hiddenAccountIds.contains(account.id);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
@@ -253,6 +281,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     ),
                     MoneyText(
                       'Ksh ${balance.toStringAsFixed(2)}',
+                      hidden: hidden,
                       style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
                     ),
                   ],
@@ -260,74 +289,18 @@ class _AccountsScreenState extends State<AccountsScreen> {
               ),
             ),
           ),
-          PopupMenuButton<String>(
-            icon: Icon(Icons.more_vert, size: 16, color: Colors.grey[400]),
-            onSelected: (value) {
-              switch (value) {
-                case 'zone':
-                  _showZonePicker(account);
-                  break;
-                case 'rename':
-                  _showRename(account);
-                  break;
-                case 'hide':
-                  _showHideConfirm(account);
-                  break;
-              }
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(value: 'zone', child: Text('Move to another zone')),
-              if (!account.isSystem)
-                const PopupMenuItem(value: 'rename', child: Text('Rename')),
-              PopupMenuItem(
-                value: 'hide',
-                child: Text('Hide', style: TextStyle(color: Colors.red[400])),
+          GestureDetector(
+            onTap: () => _toggleAccount(account.id),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Icon(
+                hidden ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                size: 16,
+                color: Colors.grey[400],
               ),
-            ],
+            ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildAddAccountButton() {
-    return GestureDetector(
-      onTap: () => showAddAccountSheet(context, onAdded: _load),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: _green.withOpacity(0.3), width: 0.5),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.add, color: _green, size: 16),
-            const SizedBox(width: 8),
-            Text('Add new account',
-                style: TextStyle(color: _green, fontSize: 13, fontWeight: FontWeight.w500)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHiddenAccountsLink() {
-    return GestureDetector(
-      onTap: _showHiddenAccounts,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.visibility_off_outlined, size: 14, color: Colors.grey[500]),
-            const SizedBox(width: 6),
-            Text('Hidden accounts',
-                style: TextStyle(color: Colors.grey[500], fontSize: 12, fontWeight: FontWeight.w500)),
-          ],
-        ),
       ),
     );
   }
@@ -418,197 +391,6 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 ),
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ── Zone picker ──────────────────────────────────────────────────
-  void _showZonePicker(Account account) {
-    showZonePicker(context, account, onSelected: (zone) async {
-      await db.updateAccountZone(account.id, zone);
-      _load();
-    });
-  }
-
-  // ── Rename sheet (custom accounts only) ─────────────────────────
-  void _showRename(Account account) {
-    final controller = TextEditingController(text: account.name);
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-        child: Container(
-          margin: const EdgeInsets.all(12),
-          decoration: BoxDecoration(color: _green, borderRadius: BorderRadius.circular(20)),
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 3,
-                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(2)),
-                ),
-              ),
-              const SizedBox(height: 20),
-              const Text('Rename account', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white)),
-              const SizedBox(height: 16),
-              TextField(
-                controller: controller,
-                autofocus: true,
-                style: const TextStyle(color: Colors.white),
-                cursorColor: _gold,
-                decoration: InputDecoration(
-                  enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white.withOpacity(0.2))),
-                  focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: _gold)),
-                ),
-              ),
-              const SizedBox(height: 20),
-              GestureDetector(
-                onTap: () async {
-                  final name = controller.text.trim();
-                  if (name.isNotEmpty) {
-                    await db.renameAccount(account.id, name);
-                    if (mounted) {
-                      Navigator.pop(ctx);
-                      _load();
-                    }
-                  }
-                },
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 13),
-                  decoration: BoxDecoration(color: _gold, borderRadius: BorderRadius.circular(12)),
-                  child: Text('Save',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: _green)),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ── Hide (soft-delete) confirm ───────────────────────────────────
-  void _showHideConfirm(Account account) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: _green,
-        title: Text('Hide "${account.name}"?',
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white)),
-        content: Text(
-          account.isSystem
-              ? 'It will stop appearing in your accounts list and bucket pickers. Balance updates from M-Pesa messages will keep running in the background — you can restore it anytime from Hidden accounts.'
-              : 'It will stop appearing in your accounts list and bucket pickers. Existing transactions are not affected, and you can restore it anytime from Hidden accounts.',
-          style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.6), height: 1.5),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancel', style: TextStyle(color: Colors.white.withOpacity(0.5))),
-          ),
-          TextButton(
-            onPressed: () async {
-              await db.deactivateAccount(account.id);
-              if (mounted) {
-                Navigator.pop(context);
-                _load();
-              }
-            },
-            child: const Text('Hide', style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Hidden accounts list ─────────────────────────────────────────
-  void _showHiddenAccounts() async {
-    final hidden = await db.getInactiveAccounts();
-    if (!mounted) return;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setModalState) => Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-          child: Container(
-            margin: const EdgeInsets.all(12),
-            constraints: const BoxConstraints(maxHeight: 500),
-            decoration: BoxDecoration(color: _green, borderRadius: BorderRadius.circular(20)),
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 36,
-                    height: 3,
-                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(2)),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text('Hidden accounts', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white)),
-                const SizedBox(height: 12),
-                if (hidden.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    child: Text('No hidden accounts.', style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.5))),
-                  )
-                else
-                  Flexible(
-                    child: ListView(
-                      shrinkWrap: true,
-                      children: hidden.map((a) => Container(
-                        margin: const EdgeInsets.only(bottom: 6),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.06),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(a.name, style: const TextStyle(fontSize: 13, color: Colors.white)),
-                            ),
-                            GestureDetector(
-                              onTap: () async {
-                                await db.reactivateAccount(a.id);
-                                final refreshed = await db.getInactiveAccounts();
-                                setModalState(() => hidden
-                                  ..clear()
-                                  ..addAll(refreshed));
-                                _load();
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                decoration: BoxDecoration(
-                                  color: _gold.withOpacity(0.15),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text('Restore',
-                                    style: TextStyle(fontSize: 11, color: _gold, fontWeight: FontWeight.w600)),
-                              ),
-                            ),
-                          ],
-                        ),
-                      )).toList(),
-                    ),
-                  ),
-              ],
-            ),
           ),
         ),
       ),

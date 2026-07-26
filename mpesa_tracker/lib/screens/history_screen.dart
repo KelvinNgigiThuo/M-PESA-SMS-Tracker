@@ -405,7 +405,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       case 'custody_spend':     return 'Custody spend';
       case 'custody_receive':   return 'Custody received';
       case 'receivable_create': return 'Fronted — pay me back';
-      case 'receivable_clear':  return 'Receivable cleared';
+      case 'receivable_clear':  return 'Debt repayment';
       case 'expense':           return 'Expense';
       case 'income':            return 'Income';
       case 'fee':               return 'Transaction fee';

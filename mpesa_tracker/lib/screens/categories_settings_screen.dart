@@ -23,8 +23,21 @@ class _CategoriesSettingsScreenState
   List<Category> _categories = [];
   bool _loading = true;
 
-  String get _title =>
-      widget.direction == 'out' ? 'Expense categories' : 'Income types';
+  bool get _isIncome => widget.direction == 'in';
+
+  String get _title => _isIncome ? 'Income types' : 'Expense categories';
+
+  List<Category> get _trueIncome =>
+      _categories.where((c) => c.group == 'true_income').toList();
+
+  List<Category> get _otherIncome =>
+      _categories.where((c) => c.group != 'true_income').toList();
+
+  List<Category> get _topLevel =>
+      _categories.where((c) => c.parentId == null).toList();
+
+  List<Category> _childrenOf(int parentId) =>
+      _categories.where((c) => c.parentId == parentId).toList();
 
   @override
   void initState() {
@@ -76,7 +89,7 @@ class _CategoriesSettingsScreenState
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'System categories can be renamed but not deleted.',
+                          'Add, rename or remove any of these freely.',
                           style: TextStyle(
                               fontSize: 11,
                               color: Colors.white.withOpacity(0.4)),
@@ -89,11 +102,9 @@ class _CategoriesSettingsScreenState
                   padding:
                       const EdgeInsets.fromLTRB(16, 20, 16, 40),
                   sliver: SliverList(
-                    delegate: SliverChildListDelegate([
-                      ..._categories.map((c) => _buildRow(c)),
-                      const SizedBox(height: 16),
-                      _buildAddButton(),
-                    ]),
+                    delegate: SliverChildListDelegate(
+                      _isIncome ? _buildIncomeSections() : _buildExpenseList(),
+                    ),
                   ),
                 ),
               ],
@@ -101,32 +112,68 @@ class _CategoriesSettingsScreenState
     );
   }
 
-  Widget _buildRow(Category c) {
+  List<Widget> _buildExpenseList() {
+    final widgets = <Widget>[];
+    for (final parent in _topLevel) {
+      final children = _childrenOf(parent.id);
+      widgets.add(_buildRow(parent));
+      for (final child in children) {
+        widgets.add(_buildRow(child, indent: true));
+      }
+      widgets.add(const SizedBox(height: 4));
+      widgets.add(_buildAddButton('Add subcategory to ${parent.name}',
+          parentId: parent.id));
+      widgets.add(const SizedBox(height: 16));
+    }
+    widgets.add(_buildAddButton('Add category', group: null));
+    return widgets;
+  }
+
+  List<Widget> _buildIncomeSections() {
+    return [
+      _sectionTitle('True income'),
+      ..._trueIncome.map((c) => _buildRow(c)),
+      const SizedBox(height: 8),
+      _buildAddButton('Add true income type', group: 'true_income'),
+      const SizedBox(height: 20),
+      _sectionTitle('Other'),
+      ..._otherIncome.map((c) => _buildRow(c)),
+      const SizedBox(height: 8),
+      _buildAddButton('Add other income type', group: 'other'),
+    ];
+  }
+
+  Widget _sectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        title.toUpperCase(),
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: Colors.grey[500],
+          letterSpacing: 0.8,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRow(Category c, {bool indent = false}) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 6),
+      margin: EdgeInsets.only(bottom: 6, left: indent ? 20 : 0),
       padding: const EdgeInsets.symmetric(
           horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: indent ? Colors.white.withOpacity(0.6) : Colors.white,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
         children: [
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(c.name,
-                    style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500)),
-                Text(
-                  c.isSystem ? 'System' : 'Custom',
-                  style: TextStyle(
-                      fontSize: 10, color: Colors.grey[400]),
-                ),
-              ],
-            ),
+            child: Text(c.name,
+                style: TextStyle(
+                    fontSize: indent ? 12 : 13,
+                    fontWeight: FontWeight.w500)),
           ),
           // Rename
           GestureDetector(
@@ -145,37 +192,35 @@ class _CategoriesSettingsScreenState
                       fontWeight: FontWeight.w500)),
             ),
           ),
-          if (!c.isSystem) ...[
-            const SizedBox(width: 8),
-            // Delete (custom only)
-            GestureDetector(
-              onTap: () => _showDelete(c),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text('Delete',
-                    style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.red[400],
-                        fontWeight: FontWeight.w500)),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: () => _showDelete(c),
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(6),
               ),
+              child: Text('Delete',
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.red[400],
+                      fontWeight: FontWeight.w500)),
             ),
-          ],
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildAddButton() {
+  Widget _buildAddButton(String label, {String? group, int? parentId}) {
     return GestureDetector(
-      onTap: _showAdd,
+      onTap: () => _showAdd(group: group, parentId: parentId),
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 14),
+        margin: EdgeInsets.only(left: parentId != null ? 20 : 0),
+        padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(10),
@@ -185,12 +230,12 @@ class _CategoriesSettingsScreenState
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.add, color: _green, size: 16),
+            Icon(Icons.add, color: _green, size: 15),
             const SizedBox(width: 8),
-            Text('Add new',
+            Text(label,
                 style: TextStyle(
                     color: _green,
-                    fontSize: 13,
+                    fontSize: 12,
                     fontWeight: FontWeight.w500)),
           ],
         ),
@@ -284,7 +329,7 @@ class _CategoriesSettingsScreenState
     );
   }
 
-  void _showAdd() {
+  void _showAdd({String? group, int? parentId}) {
     final controller = TextEditingController();
     showModalBottomSheet(
       context: context,
@@ -315,7 +360,10 @@ class _CategoriesSettingsScreenState
                 ),
               ),
               const SizedBox(height: 20),
-              Text('Add ${widget.direction == 'out' ? 'category' : 'income type'}',
+              Text(
+                  parentId != null
+                      ? 'Add subcategory'
+                      : 'Add ${widget.direction == 'out' ? 'category' : 'income type'}',
                   style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
@@ -327,9 +375,11 @@ class _CategoriesSettingsScreenState
                 style: const TextStyle(color: Colors.white),
                 cursorColor: _gold,
                 decoration: InputDecoration(
-                  hintText: widget.direction == 'out'
-                      ? 'e.g. Entertainment'
-                      : 'e.g. Rental income',
+                  hintText: parentId != null
+                      ? 'e.g. Breakfast'
+                      : widget.direction == 'out'
+                          ? 'e.g. Entertainment'
+                          : 'e.g. Rental income',
                   hintStyle: TextStyle(
                       color: Colors.white.withOpacity(0.3)),
                   enabledBorder: UnderlineInputBorder(
@@ -345,7 +395,8 @@ class _CategoriesSettingsScreenState
                   final name = controller.text.trim();
                   if (name.isNotEmpty) {
                     await db.addCategory(
-                        name, widget.direction, false);
+                        name, widget.direction, false,
+                        group: group, parentId: parentId);
                     if (mounted) {
                       Navigator.pop(ctx);
                       _load();
@@ -376,6 +427,9 @@ class _CategoriesSettingsScreenState
   }
 
   void _showDelete(Category c) {
+    final children = c.parentId == null ? _childrenOf(c.id) : <Category>[];
+    final hasChildren = children.isNotEmpty;
+
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -386,7 +440,9 @@ class _CategoriesSettingsScreenState
                 fontWeight: FontWeight.w600,
                 color: Colors.white)),
         content: Text(
-          'This will hide the category. Existing transactions using it are not affected.',
+          hasChildren
+              ? 'This will hide the category and its ${children.length} subcategories. Existing transactions using them are not affected.'
+              : 'This will hide the category. Existing transactions using it are not affected.',
           style: TextStyle(
               fontSize: 13,
               color: Colors.white.withOpacity(0.6),
@@ -401,7 +457,11 @@ class _CategoriesSettingsScreenState
           ),
           TextButton(
             onPressed: () async {
-              await db.deactivateCategory(c.id);
+              if (hasChildren) {
+                await db.deactivateCategoryAndChildren(c.id);
+              } else {
+                await db.deactivateCategory(c.id);
+              }
               if (mounted) {
                 Navigator.pop(context);
                 _load();

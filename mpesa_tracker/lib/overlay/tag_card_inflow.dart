@@ -35,9 +35,11 @@ Widget buildInflowRoot(TagCardState s) {
         iconColor: const Color(0xFF4a9eff),
         iconBg: const Color(0xFF4a9eff).withOpacity(0.12),
         title: 'Not mine',
-        subtitle: 'Custody or payment received',
-        onTap: () =>
-            s.setState(() => s.screen = 'inflow_not_mine'),
+        subtitle: "Holding it for someone's task",
+        onTap: () => s.setState(() {
+          s.noteController.clear();
+          s.screen = 'custody_receive';
+        }),
       ),
       s.buildFlowRow(
         icon: Icons.trending_up,
@@ -46,52 +48,23 @@ Widget buildInflowRoot(TagCardState s) {
         title: 'True income',
         subtitle: 'Into my own pocket',
         onTap: () {
-          if (s.incomeTypes.isEmpty && !s.loadingIncomeTypes) {
-            s.loadIncomeTypes();
+          if (s.trueIncomeCategories.isEmpty && !s.loadingTrueIncome) {
+            s.loadTrueIncomeCategories();
+          }
+          if (s.otherIncomeCategories.isEmpty && !s.loadingOtherIncome) {
+            s.loadOtherIncomeCategories();
           }
           s.setState(() => s.screen = 'income_type');
         },
         last: true,
-      ),  
-    ],
-  );
-}
-
-// ── Not mine sub-choice ───────────────────────────────────────────────
-Widget buildInflowNotMine(TagCardState s) {
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      s.buildHeader(
-          'Not mine · Ksh ${s.widget.amount.toInt()}',
-          backScreen: 'root'),
-      const SizedBox(height: 14),
-      s.buildFlowRow(
-        icon: Icons.add_circle_outline,
-        iconColor: const Color(0xFF4a9eff),
-        iconBg: const Color(0xFF4a9eff).withOpacity(0.12),
-        title: "Adding to a pool I'm holding",
-        subtitle: 'Tops up a custody pool',
-        onTap: () => s.setState(() {
-          s.noteController.clear();
-          s.screen = 'custody_receive';
-        }),
-      ),
-      s.buildFlowRow(
-        icon: Icons.check_circle_outline,
-        iconColor: const Color(0xFF5ec47a),
-        iconBg: const Color(0xFF5ec47a).withOpacity(0.12),
-        title: "Clears what I'm owed",
-        subtitle: 'Match to an open receivable',
-        onTap: () => loadReceivables(s),
-        last: true,
       ),
     ],
   );
 }
 
+// ── Income type (true income + other, two groups) ──────────────────────
 Widget buildIncomeType(TagCardState s) {
-  if (s.loadingIncomeTypes) {
+  if (s.loadingTrueIncome || s.loadingOtherIncome) {
     return Column(
       children: [
         s.buildHeader(
@@ -105,6 +78,57 @@ Widget buildIncomeType(TagCardState s) {
     );
   }
 
+  Widget buildChipGroup(String label, List<Category> categories) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: TextStyle(
+                fontSize: 11,
+                color: tagCardWhite.withOpacity(0.5))),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: categories.map((c) {
+            final selected = s.selectedIncomeType == c.name;
+            return GestureDetector(
+              onTap: () =>
+                  s.setState(() => s.selectedIncomeType = c.name),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: selected
+                      ? const Color(0xFF5ec47a).withOpacity(0.2)
+                      : tagCardWhite.withOpacity(0.06),
+                  borderRadius: BorderRadius.circular(99),
+                  border: Border.all(
+                    color: selected
+                        ? const Color(0xFF5ec47a).withOpacity(0.6)
+                        : tagCardWhite.withOpacity(0.12),
+                    width: 0.5,
+                  ),
+                ),
+                child: Text(c.name,
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: selected
+                            ? FontWeight.w600
+                            : FontWeight.w400,
+                        color: selected
+                            ? const Color(0xFF5ec47a)
+                            : tagCardWhite.withOpacity(0.8))),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  final isDebtRepayment = s.selectedIncomeType == 'Debt repayment';
+
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
@@ -112,51 +136,12 @@ Widget buildIncomeType(TagCardState s) {
           'True income · Ksh ${s.widget.amount.toInt()}',
           backScreen: 'root'),
       const SizedBox(height: 16),
-      Text('What kind of income?',
-          style: TextStyle(
-              fontSize: 11,
-              color: tagCardWhite.withOpacity(0.5))),
-      const SizedBox(height: 12),
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: s.incomeTypes.map((c) {
-          final selected = s.selectedIncomeType == c.name;
-          return GestureDetector(
-            onTap: () =>
-                s.setState(() => s.selectedIncomeType = c.name),
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: selected
-                    ? const Color(0xFF5ec47a).withOpacity(0.2)
-                    : tagCardWhite.withOpacity(0.06),
-                borderRadius: BorderRadius.circular(99),
-                border: Border.all(
-                  color: selected
-                      ? const Color(0xFF5ec47a).withOpacity(0.6)
-                      : tagCardWhite.withOpacity(0.12),
-                  width: 0.5,
-                ),
-              ),
-              child: Text(c.name,
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: selected
-                          ? FontWeight.w600
-                          : FontWeight.w400,
-                      color: selected
-                          ? const Color(0xFF5ec47a)
-                          : tagCardWhite.withOpacity(0.8))),
-            ),
-          );
-        }).toList(),
-      ),
+      buildChipGroup('True income', s.trueIncomeCategories),
       const SizedBox(height: 20),
-      // Note field for Other or Family Support
-      if (s.selectedIncomeType == 'Other' ||
-          s.selectedIncomeType == 'Family Support') ...[
+      buildChipGroup('Other', s.otherIncomeCategories),
+      const SizedBox(height: 20),
+      // Note field — not shown for Debt repayment, which has its own flow
+      if (s.selectedIncomeType != null && !isDebtRepayment) ...[
         Text("Add a note (optional)",
             style: TextStyle(
                 fontSize: 11,
@@ -166,10 +151,16 @@ Widget buildIncomeType(TagCardState s) {
         const SizedBox(height: 16),
       ],
       s.buildSaveBtn(
-          'Save',
+          isDebtRepayment ? 'Continue' : 'Save',
           s.selectedIncomeType == null
               ? null
-              : () => saveIncome(s)),
+              : () {
+                  if (isDebtRepayment) {
+                    loadReceivables(s);
+                  } else {
+                    saveIncome(s);
+                  }
+                }),
     ],
   );
 }
@@ -181,7 +172,7 @@ Widget buildCustodyReceive(TagCardState s) {
     children: [
       s.buildHeader(
           "Adding to pool · Ksh ${s.widget.amount.toInt()}",
-          backScreen: 'inflow_not_mine'),
+          backScreen: 'root'),
       const SizedBox(height: 16),
       Text("What pool is this for?",
           style: TextStyle(
@@ -195,13 +186,13 @@ Widget buildCustodyReceive(TagCardState s) {
   );
 }
 
-// ── Receivable match ──────────────────────────────────────────────────
+// ── Debt repayment match ────────────────────────────────────────────────
 Widget buildReceivableMatch(TagCardState s) {
   if (s.loadingReceivables) {
     return Column(children: [
       s.buildHeader(
-          "Clears what I'm owed · Ksh ${s.widget.amount.toInt()}",
-          backScreen: 'inflow_not_mine'),
+          "Debt repayment · Ksh ${s.widget.amount.toInt()}",
+          backScreen: 'income_type'),
       const SizedBox(height: 24),
       const Center(
           child:
@@ -214,18 +205,18 @@ Widget buildReceivableMatch(TagCardState s) {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           s.buildHeader(
-              "Clears what I'm owed · Ksh ${s.widget.amount.toInt()}",
-              backScreen: 'inflow_not_mine'),
+              "Debt repayment · Ksh ${s.widget.amount.toInt()}",
+              backScreen: 'income_type'),
           const SizedBox(height: 16),
           Text(
-            'No open receivables found.\nTag as True income instead.',
+            'No tracked debts found.',
             style: TextStyle(
                 fontSize: 13,
                 color: tagCardWhite.withOpacity(0.5)),
           ),
           const SizedBox(height: 16),
           s.buildSaveBtn(
-              'Save as income', () => saveIncome(s)),
+              'Log as debt repayment', () => saveIncome(s)),
         ]);
   }
   return Column(
@@ -233,8 +224,8 @@ Widget buildReceivableMatch(TagCardState s) {
     mainAxisSize: MainAxisSize.min,
     children: [
       s.buildHeader(
-          "Clears what I'm owed · Ksh ${s.widget.amount.toInt()}",
-          backScreen: 'inflow_not_mine'),
+          "Debt repayment · Ksh ${s.widget.amount.toInt()}",
+          backScreen: 'income_type'),
       const SizedBox(height: 10),
       ConstrainedBox(
         constraints: const BoxConstraints(maxHeight: 220),
@@ -306,6 +297,17 @@ Widget buildReceivableMatch(TagCardState s) {
           },
         ),
       ),
+      const SizedBox(height: 12),
+      GestureDetector(
+        onTap: () => saveIncome(s),
+        child: Text(
+          'Not one of these — log as debt repayment',
+          style: TextStyle(
+              fontSize: 12,
+              color: tagCardGold.withOpacity(0.9),
+              fontWeight: FontWeight.w500),
+        ),
+      ),
     ],
   );
 }
@@ -314,7 +316,7 @@ Widget buildReceivableMatch(TagCardState s) {
 Future<void> loadReceivables(TagCardState s) async {
   s.setState(() {
     s.loadingReceivables = true;
-    s.screen = 'receivable_match';
+    s.screen = 'debt_repayment_match';
   });
   final results = await db.getOpenReceivables();
   s.setState(() {

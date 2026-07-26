@@ -1590,6 +1590,26 @@ class $CategoriesTable extends Categories
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _groupMeta = const VerificationMeta('group');
+  @override
+  late final GeneratedColumn<String> group = GeneratedColumn<String>(
+    'group',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _parentIdMeta = const VerificationMeta(
+    'parentId',
+  );
+  @override
+  late final GeneratedColumn<int> parentId = GeneratedColumn<int>(
+    'parent_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -1609,6 +1629,8 @@ class $CategoriesTable extends Categories
     isSystem,
     isActive,
     sortOrder,
+    group,
+    parentId,
     createdAt,
   ];
   @override
@@ -1660,6 +1682,18 @@ class $CategoriesTable extends Categories
         sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
       );
     }
+    if (data.containsKey('group')) {
+      context.handle(
+        _groupMeta,
+        group.isAcceptableOrUnknown(data['group']!, _groupMeta),
+      );
+    }
+    if (data.containsKey('parent_id')) {
+      context.handle(
+        _parentIdMeta,
+        parentId.isAcceptableOrUnknown(data['parent_id']!, _parentIdMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -1701,6 +1735,14 @@ class $CategoriesTable extends Categories
         DriftSqlType.int,
         data['${effectivePrefix}sort_order'],
       )!,
+      group: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}group'],
+      ),
+      parentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}parent_id'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -1721,6 +1763,8 @@ class Category extends DataClass implements Insertable<Category> {
   final bool isSystem;
   final bool isActive;
   final int sortOrder;
+  final String? group;
+  final int? parentId;
   final DateTime createdAt;
   const Category({
     required this.id,
@@ -1729,6 +1773,8 @@ class Category extends DataClass implements Insertable<Category> {
     required this.isSystem,
     required this.isActive,
     required this.sortOrder,
+    this.group,
+    this.parentId,
     required this.createdAt,
   });
   @override
@@ -1740,6 +1786,12 @@ class Category extends DataClass implements Insertable<Category> {
     map['is_system'] = Variable<bool>(isSystem);
     map['is_active'] = Variable<bool>(isActive);
     map['sort_order'] = Variable<int>(sortOrder);
+    if (!nullToAbsent || group != null) {
+      map['group'] = Variable<String>(group);
+    }
+    if (!nullToAbsent || parentId != null) {
+      map['parent_id'] = Variable<int>(parentId);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -1752,6 +1804,12 @@ class Category extends DataClass implements Insertable<Category> {
       isSystem: Value(isSystem),
       isActive: Value(isActive),
       sortOrder: Value(sortOrder),
+      group: group == null && nullToAbsent
+          ? const Value.absent()
+          : Value(group),
+      parentId: parentId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(parentId),
       createdAt: Value(createdAt),
     );
   }
@@ -1768,6 +1826,8 @@ class Category extends DataClass implements Insertable<Category> {
       isSystem: serializer.fromJson<bool>(json['isSystem']),
       isActive: serializer.fromJson<bool>(json['isActive']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      group: serializer.fromJson<String?>(json['group']),
+      parentId: serializer.fromJson<int?>(json['parentId']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -1781,6 +1841,8 @@ class Category extends DataClass implements Insertable<Category> {
       'isSystem': serializer.toJson<bool>(isSystem),
       'isActive': serializer.toJson<bool>(isActive),
       'sortOrder': serializer.toJson<int>(sortOrder),
+      'group': serializer.toJson<String?>(group),
+      'parentId': serializer.toJson<int?>(parentId),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -1792,6 +1854,8 @@ class Category extends DataClass implements Insertable<Category> {
     bool? isSystem,
     bool? isActive,
     int? sortOrder,
+    Value<String?> group = const Value.absent(),
+    Value<int?> parentId = const Value.absent(),
     DateTime? createdAt,
   }) => Category(
     id: id ?? this.id,
@@ -1800,6 +1864,8 @@ class Category extends DataClass implements Insertable<Category> {
     isSystem: isSystem ?? this.isSystem,
     isActive: isActive ?? this.isActive,
     sortOrder: sortOrder ?? this.sortOrder,
+    group: group.present ? group.value : this.group,
+    parentId: parentId.present ? parentId.value : this.parentId,
     createdAt: createdAt ?? this.createdAt,
   );
   Category copyWithCompanion(CategoriesCompanion data) {
@@ -1810,6 +1876,8 @@ class Category extends DataClass implements Insertable<Category> {
       isSystem: data.isSystem.present ? data.isSystem.value : this.isSystem,
       isActive: data.isActive.present ? data.isActive.value : this.isActive,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      group: data.group.present ? data.group.value : this.group,
+      parentId: data.parentId.present ? data.parentId.value : this.parentId,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -1823,6 +1891,8 @@ class Category extends DataClass implements Insertable<Category> {
           ..write('isSystem: $isSystem, ')
           ..write('isActive: $isActive, ')
           ..write('sortOrder: $sortOrder, ')
+          ..write('group: $group, ')
+          ..write('parentId: $parentId, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -1836,6 +1906,8 @@ class Category extends DataClass implements Insertable<Category> {
     isSystem,
     isActive,
     sortOrder,
+    group,
+    parentId,
     createdAt,
   );
   @override
@@ -1848,6 +1920,8 @@ class Category extends DataClass implements Insertable<Category> {
           other.isSystem == this.isSystem &&
           other.isActive == this.isActive &&
           other.sortOrder == this.sortOrder &&
+          other.group == this.group &&
+          other.parentId == this.parentId &&
           other.createdAt == this.createdAt);
 }
 
@@ -1858,6 +1932,8 @@ class CategoriesCompanion extends UpdateCompanion<Category> {
   final Value<bool> isSystem;
   final Value<bool> isActive;
   final Value<int> sortOrder;
+  final Value<String?> group;
+  final Value<int?> parentId;
   final Value<DateTime> createdAt;
   const CategoriesCompanion({
     this.id = const Value.absent(),
@@ -1866,6 +1942,8 @@ class CategoriesCompanion extends UpdateCompanion<Category> {
     this.isSystem = const Value.absent(),
     this.isActive = const Value.absent(),
     this.sortOrder = const Value.absent(),
+    this.group = const Value.absent(),
+    this.parentId = const Value.absent(),
     this.createdAt = const Value.absent(),
   });
   CategoriesCompanion.insert({
@@ -1875,6 +1953,8 @@ class CategoriesCompanion extends UpdateCompanion<Category> {
     this.isSystem = const Value.absent(),
     this.isActive = const Value.absent(),
     this.sortOrder = const Value.absent(),
+    this.group = const Value.absent(),
+    this.parentId = const Value.absent(),
     required DateTime createdAt,
   }) : name = Value(name),
        direction = Value(direction),
@@ -1886,6 +1966,8 @@ class CategoriesCompanion extends UpdateCompanion<Category> {
     Expression<bool>? isSystem,
     Expression<bool>? isActive,
     Expression<int>? sortOrder,
+    Expression<String>? group,
+    Expression<int>? parentId,
     Expression<DateTime>? createdAt,
   }) {
     return RawValuesInsertable({
@@ -1895,6 +1977,8 @@ class CategoriesCompanion extends UpdateCompanion<Category> {
       if (isSystem != null) 'is_system': isSystem,
       if (isActive != null) 'is_active': isActive,
       if (sortOrder != null) 'sort_order': sortOrder,
+      if (group != null) 'group': group,
+      if (parentId != null) 'parent_id': parentId,
       if (createdAt != null) 'created_at': createdAt,
     });
   }
@@ -1906,6 +1990,8 @@ class CategoriesCompanion extends UpdateCompanion<Category> {
     Value<bool>? isSystem,
     Value<bool>? isActive,
     Value<int>? sortOrder,
+    Value<String?>? group,
+    Value<int?>? parentId,
     Value<DateTime>? createdAt,
   }) {
     return CategoriesCompanion(
@@ -1915,6 +2001,8 @@ class CategoriesCompanion extends UpdateCompanion<Category> {
       isSystem: isSystem ?? this.isSystem,
       isActive: isActive ?? this.isActive,
       sortOrder: sortOrder ?? this.sortOrder,
+      group: group ?? this.group,
+      parentId: parentId ?? this.parentId,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -1940,6 +2028,12 @@ class CategoriesCompanion extends UpdateCompanion<Category> {
     if (sortOrder.present) {
       map['sort_order'] = Variable<int>(sortOrder.value);
     }
+    if (group.present) {
+      map['group'] = Variable<String>(group.value);
+    }
+    if (parentId.present) {
+      map['parent_id'] = Variable<int>(parentId.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -1955,6 +2049,8 @@ class CategoriesCompanion extends UpdateCompanion<Category> {
           ..write('isSystem: $isSystem, ')
           ..write('isActive: $isActive, ')
           ..write('sortOrder: $sortOrder, ')
+          ..write('group: $group, ')
+          ..write('parentId: $parentId, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -2684,6 +2780,8 @@ typedef $$CategoriesTableCreateCompanionBuilder =
       Value<bool> isSystem,
       Value<bool> isActive,
       Value<int> sortOrder,
+      Value<String?> group,
+      Value<int?> parentId,
       required DateTime createdAt,
     });
 typedef $$CategoriesTableUpdateCompanionBuilder =
@@ -2694,6 +2792,8 @@ typedef $$CategoriesTableUpdateCompanionBuilder =
       Value<bool> isSystem,
       Value<bool> isActive,
       Value<int> sortOrder,
+      Value<String?> group,
+      Value<int?> parentId,
       Value<DateTime> createdAt,
     });
 
@@ -2733,6 +2833,16 @@ class $$CategoriesTableFilterComposer
 
   ColumnFilters<int> get sortOrder => $composableBuilder(
     column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get group => $composableBuilder(
+    column: $table.group,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get parentId => $composableBuilder(
+    column: $table.parentId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2781,6 +2891,16 @@ class $$CategoriesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get group => $composableBuilder(
+    column: $table.group,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get parentId => $composableBuilder(
+    column: $table.parentId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -2813,6 +2933,12 @@ class $$CategoriesTableAnnotationComposer
 
   GeneratedColumn<int> get sortOrder =>
       $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<String> get group =>
+      $composableBuilder(column: $table.group, builder: (column) => column);
+
+  GeneratedColumn<int> get parentId =>
+      $composableBuilder(column: $table.parentId, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -2852,6 +2978,8 @@ class $$CategoriesTableTableManager
                 Value<bool> isSystem = const Value.absent(),
                 Value<bool> isActive = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
+                Value<String?> group = const Value.absent(),
+                Value<int?> parentId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => CategoriesCompanion(
                 id: id,
@@ -2860,6 +2988,8 @@ class $$CategoriesTableTableManager
                 isSystem: isSystem,
                 isActive: isActive,
                 sortOrder: sortOrder,
+                group: group,
+                parentId: parentId,
                 createdAt: createdAt,
               ),
           createCompanionCallback:
@@ -2870,6 +3000,8 @@ class $$CategoriesTableTableManager
                 Value<bool> isSystem = const Value.absent(),
                 Value<bool> isActive = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
+                Value<String?> group = const Value.absent(),
+                Value<int?> parentId = const Value.absent(),
                 required DateTime createdAt,
               }) => CategoriesCompanion.insert(
                 id: id,
@@ -2878,6 +3010,8 @@ class $$CategoriesTableTableManager
                 isSystem: isSystem,
                 isActive: isActive,
                 sortOrder: sortOrder,
+                group: group,
+                parentId: parentId,
                 createdAt: createdAt,
               ),
           withReferenceMapper: (p0) => p0

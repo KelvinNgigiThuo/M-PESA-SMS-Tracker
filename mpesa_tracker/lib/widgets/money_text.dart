@@ -5,21 +5,31 @@ class MoneyText extends StatelessWidget {
   final String value;
   final TextStyle? style;
   final TextAlign? textAlign;
+  final bool? hidden;
 
   const MoneyText(
     this.value, {
     super.key,
     this.style,
     this.textAlign,
+    this.hidden,
   });
 
   @override
   Widget build(BuildContext context) {
+    if (hidden != null) {
+      return Text(
+        hidden! ? '•••••' : value,
+        style: style,
+        textAlign: textAlign,
+      );
+    }
+
     return ValueListenableBuilder<bool>(
       valueListenable: isPrivacyMode,
-      builder: (context, hidden, _) {
+      builder: (context, globalHidden, _) {
         return Text(
-          hidden ? '•••••' : value,
+          globalHidden ? '•••••' : value,
           style: style,
           textAlign: textAlign,
         );
