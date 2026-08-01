@@ -3,6 +3,7 @@ import '../database/app_database.dart';
 import '../overlay/overlay_channel.dart';
 import '../main.dart';
 import '../widgets/money_text.dart';
+import '../widgets/direction_toggle.dart';
 
 const _green = Color(0xFF1A3C34);
 const _gold = Color(0xFFC9A84C);
@@ -18,22 +19,17 @@ class HistoryScreen extends StatefulWidget {
 
 class _HistoryScreenState extends State<HistoryScreen> {
   List<Transaction> _all = [];
-  String _filter = 'all';
+  String _direction = 'out';
+  bool _untaggedOnly = false;
   bool _loading = true;
-
-  final List<Map<String, String>> _filters = [
-    {'value': 'all',        'label': 'All'},
-    {'value': 'untagged',   'label': 'Untagged'},
-    {'value': 'expense',    'label': 'Expenses'},
-    {'value': 'income',     'label': 'Income'},
-    {'value': 'transfer',   'label': 'Transfers'},
-    {'value': 'custody',    'label': 'Custody'},
-    {'value': 'receivable', 'label': 'Receivables'},
-  ];
 
   @override
   void initState() {
     super.initState();
+    if (ledgerInitialDirection.value != null) {
+      _direction = ledgerInitialDirection.value!;
+      ledgerInitialDirection.value = null;
+    }
     _load();
   }
 
@@ -46,40 +42,46 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   List<Transaction> get _filtered {
-    switch (_filter) {
-      case 'untagged':
-        return _all.where((t) => !t.isTagged).toList();
-      case 'expense':
-        return _all
-            .where((t) => t.type == 'expense' || t.type == 'fee')
-            .toList();
-      case 'income':
-        return _all.where((t) => t.type == 'income').toList();
-      case 'transfer':
-        return _all
-            .where((t) =>
-                t.type == 'transfer' ||
-                t.type == 'transfer_in' ||
-                t.type == 'mshwari_out' ||
-                t.type == 'mshwari_in' ||
-                t.type == 'kcbmpesa_out' ||
-                t.type == 'kcbmpesa_in')
-            .toList();
-      case 'custody':
-        return _all
-            .where((t) =>
-                t.type == 'custody_spend' ||
-                t.type == 'custody_receive')
-            .toList();
-      case 'receivable':
-        return _all
-            .where((t) =>
-                t.type == 'receivable_create' ||
-                t.type == 'receivable_clear')
-            .toList();
-      default:
-        return _all;
+    var list = _all.where((t) => t.direction == _direction).toList();
+    if (_untaggedOnly) {
+      list = list.where((t) => !t.isTagged).toList();
     }
+    return list;
+  }
+
+  double _sumType(String type) => _all
+      .where((t) => t.type == type)
+      .fold(0.0, (sum, t) => sum + t.amount);
+
+  List<MapEntry<String, double>> get _typeSummary {
+    final Map<String, double> totals = _direction == 'out'
+        ? {
+            'True expense': _sumType('expense'),
+            'Transfers': _sumType('transfer'),
+            'Custody spent': _sumType('custody_spend'),
+            'Fronted (owed)': _sumType('receivable_create'),
+          }
+        : {
+            'True income': _sumType('income'),
+            'Transfers in': _sumType('transfer_in'),
+            'Custody received': _sumType('custody_receive'),
+            'Debt repayment': _sumType('receivable_clear'),
+          };
+    return totals.entries.where((e) => e.value > 0).toList();
+  }
+
+  List<MapEntry<String, double>> get _categorySummary {
+    final Map<String, double> totals = {};
+    for (final t in _all) {
+      if (t.direction != _direction) continue;
+      final cat = t.category;
+      if (cat == null || cat.isEmpty) continue;
+      final topLevel = cat.split(': ').first;
+      totals[topLevel] = (totals[topLevel] ?? 0) + t.amount;
+    }
+    final list = totals.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    return list;
   }
 
   @override
@@ -144,8 +146,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 // ── Untagged banner ──────────────────────────────
                 if (untaggedCount > 0)
                   GestureDetector(
-                    onTap: () =>
-                        setState(() => _filter = 'untagged'),
+                    onTap: () => setState(
+                        () => _untaggedOnly = !_untaggedOnly),
                     child: Container(
                       width: double.infinity,
                       color: const Color(0xFFFFF8EC),
@@ -175,95 +177,147 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       ),
                     ),
                   ),
-                // ── Filter chips ─────────────────────────────────
-                Container(
-                  color: Colors.white,
-                  height: 48,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 8),
-                    children: _filters.map((f) {
-                      final isSelected = _filter == f['value'];
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: GestureDetector(
-                          onTap: () => setState(
-                              () => _filter = f['value']!),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? _green
-                                  : Colors.transparent,
-                              borderRadius:
-                                  BorderRadius.circular(99),
-                              border: Border.all(
-                                color: isSelected
-                                    ? _green
-                                    : Colors.grey[300]!,
-                                width: 0.5,
-                              ),
-                            ),
-                            child: Text(
-                              f['label']!,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: isSelected
-                                    ? FontWeight.w600
-                                    : FontWeight.w400,
-                                color: isSelected
-                                    ? _gold
-                                    : Colors.grey[600],
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-                // Thin divider under filter chips
-                Container(height: 0.5, color: Colors.grey[200]),
-                // ── Transaction count ────────────────────────────
-                Padding(
-                  padding:
-                      const EdgeInsets.fromLTRB(16, 10, 16, 6),
-                  child: Row(
-                    children: [
-                      Text(
-                        '${_filtered.length} result${_filtered.length != 1 ? 's' : ''}',
-                        style: TextStyle(
-                            fontSize: 11, color: Colors.grey[400]),
-                      ),
-                    ],
-                  ),
-                ),
-                // ── List ─────────────────────────────────────────
+                // ── Outflow/Inflow toggle + breakdowns + list ────
                 Expanded(
-                  child: _filtered.isEmpty
-                      ? Center(
-                          child: Text(
-                            'No transactions found',
-                            style:
-                                TextStyle(color: Colors.grey[400]),
-                          ),
-                        )
-                      : RefreshIndicator(
-                          color: _gold,
-                          onRefresh: _load,
-                          child: ListView.builder(
+                  child: RefreshIndicator(
+                    color: _gold,
+                    onRefresh: _load,
+                    child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            color: Colors.white,
                             padding: const EdgeInsets.fromLTRB(
-                                16, 4, 16, 16),
-                            itemCount: _filtered.length,
-                            itemBuilder: (_, i) =>
-                                _buildRow(_filtered[i]),
+                                16, 12, 16, 12),
+                            child: buildDirectionToggle(
+                              value: _direction,
+                              onChanged: (v) =>
+                                  setState(() => _direction = v),
+                            ),
                           ),
-                        ),
+                          Container(
+                              height: 0.5, color: Colors.grey[200]),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(
+                                16, 16, 16, 0),
+                            child: Column(
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.start,
+                              children: [
+                                if (_typeSummary.isNotEmpty) ...[
+                                  _breakdownTitle('Summary'),
+                                  const SizedBox(height: 8),
+                                  _buildSummaryCard(_typeSummary),
+                                  const SizedBox(height: 16),
+                                ],
+                                if (_categorySummary.isNotEmpty) ...[
+                                  _breakdownTitle('By category'),
+                                  const SizedBox(height: 8),
+                                  _buildSummaryCard(_categorySummary),
+                                  const SizedBox(height: 8),
+                                ],
+                              ],
+                            ),
+                          ),
+                          _buildTransactionCount(),
+                          if (_filtered.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 40),
+                              child: Center(
+                                child: Text(
+                                  'No transactions found',
+                                  style: TextStyle(
+                                      color: Colors.grey[400]),
+                                ),
+                              ),
+                            )
+                          else
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(
+                                  16, 0, 16, 16),
+                              child: Column(
+                                children:
+                                    _filtered.map(_buildRow).toList(),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
+    );
+  }
+
+  Widget _breakdownTitle(String title) {
+    return Text(
+      title.toUpperCase(),
+      style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: Colors.grey[400],
+          letterSpacing: 0.8),
+    );
+  }
+
+  Widget _buildSummaryCard(List<MapEntry<String, double>> entries) {
+    final color = _direction == 'out' ? _expenseColor : _incomeColor;
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        children: [
+          for (var i = 0; i < entries.length; i++)
+            Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                border: i == entries.length - 1
+                    ? null
+                    : Border(
+                        bottom: BorderSide(
+                            color: Colors.grey[100]!, width: 1)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(entries[i].key,
+                      style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500)),
+                  MoneyText(
+                    'Ksh ${entries[i].value.toStringAsFixed(0)}',
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: color),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTransactionCount() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
+      child: Row(
+        children: [
+          Text(
+            '${_filtered.length} result${_filtered.length != 1 ? 's' : ''}',
+            style:
+                TextStyle(fontSize: 11, color: Colors.grey[400]),
+          ),
+        ],
+      ),
     );
   }
 

@@ -3,6 +3,7 @@ import '../screens/dashboard_screen.dart';
 import '../screens/accounts_screen.dart';
 import '../screens/history_screen.dart';
 import '../screens/settings_screen.dart';
+import '../main.dart';
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
@@ -23,6 +24,26 @@ class _MainShellState extends State<MainShell> {
     HistoryScreen(),
     SettingsScreen(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    requestedTab.addListener(_onTabRequested);
+  }
+
+  @override
+  void dispose() {
+    requestedTab.removeListener(_onTabRequested);
+    super.dispose();
+  }
+
+  void _onTabRequested() {
+    final index = requestedTab.value;
+    if (index != null) {
+      setState(() => _currentIndex = index);
+      requestedTab.value = null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

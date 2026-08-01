@@ -4,6 +4,7 @@ import '../database/app_database.dart';
 import '../overlay/overlay_channel.dart';
 import '../main.dart';
 import '../widgets/money_text.dart';
+import '../widgets/direction_toggle.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const _green = Color(0xFF1A3C34);
@@ -33,6 +34,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   double _zone1Total = 0;
   double _zone2Total = 0;
   double _bufferTarget = 10000;
+  double _monthlyOut = 0;
+  double _monthlyIn = 0;
+  String _monthDirection = 'out';
 
   bool _loading = true;
 
@@ -72,6 +76,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     DateTime? lastBalanceTime;
     double custody = 0;
     double receivables = 0;
+    double monthlyOut = 0;
+    double monthlyIn = 0;
+    final now = DateTime.now();
     final Map<String, double> poolMap = {};
 
     // Load buffer target from prefs
@@ -79,6 +86,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final bufferTarget = prefs.getDouble('buffer_target') ?? 10000;
 
     for (final t in all) {
+      if (t.createdAt.year == now.year && t.createdAt.month == now.month) {
+        if (t.direction == 'out') {
+          monthlyOut += t.amount;
+        } else if (t.direction == 'in') {
+          monthlyIn += t.amount;
+        }
+      }
       if (t.balanceAfter > 0) {
         if (lastBalanceTime == null ||
             t.createdAt.isAfter(lastBalanceTime)) {
@@ -148,6 +162,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _zone1Total = zone1Total;
       _zone2Total = zone2Total;
       _bufferTarget = bufferTarget;
+      _monthlyOut = monthlyOut;
+      _monthlyIn = monthlyIn;
       _custodyPools = openPools;
       _openReceivables = openReceivables;
       _recent = recent;
@@ -159,7 +175,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _mpesaBalance + _bucketTotal - _custodyHeld + _openReceivablesTotal;
 
   double get _availableToDeploy =>
-      _zone1Total + _zone2Total;
+      _zone1Total + _zone2Total - _custodyHeld;
 
   double get _bufferPercent =>
       (_zone2Total / _bufferTarget).clamp(0.0, 1.0);
@@ -182,6 +198,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
                     sliver: SliverList(
                       delegate: SliverChildListDelegate([
+                        _buildThisMonthSection(),
                         if (_openReceivables.isNotEmpty) ...[
                           _sectionTitle('Owed to me',
                               total: _openReceivablesTotal,
@@ -292,7 +309,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                'Operating + Reserves (Zone 1 + Zone 2)',
+                'Operating + Reserves − custody held',
                 style: TextStyle(
                     fontSize: 10,
                     color: Colors.white.withOpacity(0.3)),
@@ -419,6 +436,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
       width: 0.5,
       height: 30,
       color: Colors.grey[200],
+    );
+  }
+
+  // ── This month ────────────────────────────────────────────────────
+  Widget _buildThisMonthSection() {
+    final amount =
+        _monthDirection == 'out' ? _monthlyOut : _monthlyIn;
+    final color =
+        _monthDirection == 'out' ? _expenseColor : _incomeColor;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 4),
+      child: Container(
+        padding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            buildDirectionToggle(
+              value: _monthDirection,
+              onChanged: (v) => setState(() => _monthDirection = v),
+            ),
+            const Spacer(),
+            GestureDetector(
+              onTap: () {
+                ledgerInitialDirection.value = _monthDirection;
+                requestedTab.value = 2;
+              },
+              child: MoneyText(
+                'Ksh ${amount.toStringAsFixed(0)}',
+                style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: color),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

@@ -42,6 +42,28 @@ Future<void> showTagCard(
     }
   }
 
+  // Record the transaction as untagged the moment the tag card is shown,
+  // so dismissing it any way (the X icon, swiping the sheet down, tapping
+  // outside it) without committing a tag still leaves it visible in the
+  // ledger as untagged instead of being silently lost. Tagging afterwards
+  // updates this same row (see TagCardState.upsert) rather than duplicating it.
+  final existingUntagged = await (db.select(db.transactions)
+        ..where((t) =>
+            t.txCode.equals(txCode) & t.isTagged.equals(false)))
+      .getSingleOrNull();
+  if (existingUntagged == null) {
+    await db.insertTransaction(TransactionsCompanion(
+      txCode: drift.Value(txCode),
+      amount: drift.Value(amount),
+      recipient: drift.Value(recipient),
+      direction: drift.Value(direction),
+      balanceAfter: drift.Value(balance),
+      rawSms: drift.Value(''),
+      createdAt: drift.Value(DateTime.now()),
+      isTagged: drift.Value(false),
+    ));
+  }
+
   if (!context.mounted) return;
 
   await showModalBottomSheet(

@@ -11,6 +11,11 @@ import 'overlay/overlay_channel.dart';
 final AppDatabase db = AppDatabase();
 final ValueNotifier<bool> isPrivacyMode = ValueNotifier(false);
 
+// Cross-tab navigation: set both to jump MainShell to a tab, optionally
+// seeding the Ledger's initial direction filter.
+final ValueNotifier<int?> requestedTab = ValueNotifier(null);
+final ValueNotifier<String?> ledgerInitialDirection = ValueNotifier(null);
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const DhahiriApp(home: AppEntry()));
