@@ -10,6 +10,14 @@ const _gold = Color(0xFFC9A84C);
 const _incomeColor = Color(0xFF5ec47a);
 const _expenseColor = Color(0xFFe05252);
 
+List<BoxShadow> get _cardShadow => [
+      BoxShadow(
+        color: Colors.black.withOpacity(0.06),
+        blurRadius: 12,
+        offset: const Offset(0, 4),
+      ),
+    ];
+
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
 
@@ -42,11 +50,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   List<Transaction> get _filtered {
-    var list = _all.where((t) => t.direction == _direction).toList();
+    // Untagged transactions can be either direction — show all of them
+    // regardless of the Out/In toggle, since tagging is how their
+    // category (and often their real intent) gets decided in the first
+    // place.
     if (_untaggedOnly) {
-      list = list.where((t) => !t.isTagged).toList();
+      return _all.where((t) => !t.isTagged).toList();
     }
-    return list;
+    return _all.where((t) => t.direction == _direction).toList();
   }
 
   double _sumType(String type) => _all
@@ -143,40 +154,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     ],
                   ),
                 ),
-                // ── Untagged banner ──────────────────────────────
-                if (untaggedCount > 0)
-                  GestureDetector(
-                    onTap: () => setState(
-                        () => _untaggedOnly = !_untaggedOnly),
-                    child: Container(
-                      width: double.infinity,
-                      color: const Color(0xFFFFF8EC),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
-                      child: Row(
-                        children: [
-                          Icon(Icons.warning_amber_rounded,
-                              color: Colors.orange[700], size: 16),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              '$untaggedCount transaction${untaggedCount > 1 ? 's' : ''} '
-                              'waiting to be tagged',
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.orange[800],
-                                  fontWeight: FontWeight.w500),
-                            ),
-                          ),
-                          Text('View',
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.orange[700],
-                                  fontWeight: FontWeight.w600)),
-                        ],
-                      ),
-                    ),
-                  ),
                 // ── Outflow/Inflow toggle + breakdowns + list ────
                 Expanded(
                   child: RefreshIndicator(
@@ -187,18 +164,100 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Container(
-                            color: Colors.white,
+                          // ── Untagged banner ──────────────────
+                          if (untaggedCount > 0)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(
+                                  16, 14, 16, 0),
+                              child: GestureDetector(
+                                onTap: () => setState(() =>
+                                    _untaggedOnly = !_untaggedOnly),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 14, vertical: 12),
+                                  decoration: BoxDecoration(
+                                    color: _untaggedOnly
+                                        ? _gold.withOpacity(0.12)
+                                        : Colors.white,
+                                    borderRadius:
+                                        BorderRadius.circular(14),
+                                    border: Border.all(
+                                        color: _gold.withOpacity(0.35),
+                                        width: 1),
+                                    boxShadow: _cardShadow,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 30,
+                                        height: 30,
+                                        decoration: BoxDecoration(
+                                          color: _gold.withOpacity(0.15),
+                                          borderRadius:
+                                              BorderRadius.circular(9),
+                                        ),
+                                        child: const Icon(
+                                            Icons.hourglass_empty,
+                                            color: _gold,
+                                            size: 15),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          '$untaggedCount transaction${untaggedCount > 1 ? 's' : ''} '
+                                          'waiting to be tagged',
+                                          style: const TextStyle(
+                                              fontSize: 12,
+                                              color: _green,
+                                              fontWeight: FontWeight.w600),
+                                        ),
+                                      ),
+                                      Icon(
+                                        _untaggedOnly
+                                            ? Icons.close
+                                            : Icons.chevron_right,
+                                        color: _gold,
+                                        size: 16,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          // ── Direction toggle card ────────────
+                          Padding(
                             padding: const EdgeInsets.fromLTRB(
-                                16, 12, 16, 12),
-                            child: buildDirectionToggle(
-                              value: _direction,
-                              onChanged: (v) =>
-                                  setState(() => _direction = v),
+                                16, 14, 16, 0),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(14),
+                                boxShadow: _cardShadow,
+                              ),
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  buildDirectionToggle(
+                                    value: _direction,
+                                    onChanged: (v) => setState(
+                                        () => _direction = v),
+                                  ),
+                                  Text(
+                                    _untaggedOnly
+                                        ? '${_filtered.length} untagged'
+                                        : '${_filtered.length} ${_direction == 'out' ? 'outflow' : 'inflow'}${_filtered.length != 1 ? 's' : ''}',
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey[400],
+                                        fontWeight: FontWeight.w500),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                          Container(
-                              height: 0.5, color: Colors.grey[200]),
                           Padding(
                             padding: const EdgeInsets.fromLTRB(
                                 16, 16, 16, 0),
@@ -221,7 +280,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               ],
                             ),
                           ),
-                          _buildTransactionCount(),
+                          const SizedBox(height: 8),
                           if (_filtered.isEmpty)
                             Padding(
                               padding: const EdgeInsets.symmetric(
@@ -269,7 +328,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: _cardShadow,
       ),
       child: Column(
         children: [
@@ -306,21 +366,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  Widget _buildTransactionCount() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
-      child: Row(
-        children: [
-          Text(
-            '${_filtered.length} result${_filtered.length != 1 ? 's' : ''}',
-            style:
-                TextStyle(fontSize: 11, color: Colors.grey[400]),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildRow(Transaction t) {
     final isIn = t.direction == 'in';
     final color = isIn ? _incomeColor : _expenseColor;
@@ -346,7 +391,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: !t.isTagged
-              ? Colors.orange[100]!
+              ? _gold.withOpacity(0.3)
               : Colors.transparent,
           width: !t.isTagged ? 1 : 0,
         ),
@@ -359,12 +404,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
             decoration: BoxDecoration(
               color: t.isTagged
                   ? color.withOpacity(0.1)
-                  : Colors.orange.withOpacity(0.08),
+                  : _gold.withOpacity(0.12),
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
                 color: t.isTagged
                     ? color.withOpacity(0.15)
-                    : Colors.orange.withOpacity(0.2),
+                    : _gold.withOpacity(0.3),
                 width: 0.5,
               ),
             ),
@@ -374,7 +419,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   : isIn
                       ? Icons.arrow_downward
                       : Icons.arrow_upward,
-              color: t.isTagged ? color : Colors.orange,
+              color: t.isTagged ? color : _gold,
               size: 15,
             ),
           ),
@@ -407,7 +452,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: t.isTagged ? color : Colors.orange),
+                    color: t.isTagged ? color : _green),
               ),
               if (!t.isTagged)
                 Container(
@@ -415,12 +460,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: Colors.orange[50],
+                    color: _gold.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(4),
                   ),
-                  child: const Text('tap to tag',
+                  child: Text('tap to tag',
                       style: TextStyle(
-                          fontSize: 9, color: Colors.orange)),
+                          fontSize: 9,
+                          color: _gold.withOpacity(0.9),
+                          fontWeight: FontWeight.w600)),
                 ),
             ],
           ),

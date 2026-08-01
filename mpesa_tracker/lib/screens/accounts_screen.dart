@@ -19,6 +19,8 @@ class _AccountsScreenState extends State<AccountsScreen> {
   List<Account> _accounts = [];
   Map<String, double> _bucketBalances = {};
   double _mpesaLiveBalance = 0;
+  double _custodyHeld = 0;
+  double _openReceivablesTotal = 0;
   bool _loading = true;
   Set<int> _hiddenAccountIds = {};
 
@@ -40,6 +42,8 @@ class _AccountsScreenState extends State<AccountsScreen> {
 
     double mpesaBalance = 0;
     DateTime? lastBalanceTime;
+    double custody = 0;
+    double receivables = 0;
     for (final t in all) {
       if (t.balanceAfter > 0) {
         if (lastBalanceTime == null || t.createdAt.isAfter(lastBalanceTime)) {
@@ -47,12 +51,18 @@ class _AccountsScreenState extends State<AccountsScreen> {
           lastBalanceTime = t.createdAt;
         }
       }
+      if (t.type == 'custody_receive') custody += t.amount;
+      if (t.type == 'custody_spend') custody -= t.amount;
+      if (t.type == 'receivable_create') receivables += t.amount;
+      if (t.type == 'receivable_clear') receivables -= t.amount;
     }
 
     setState(() {
       _accounts = accounts;
       _bucketBalances = bucketBalances;
       _mpesaLiveBalance = mpesaBalance;
+      _custodyHeld = custody.clamp(0, double.infinity);
+      _openReceivablesTotal = receivables.clamp(0, double.infinity);
       _loading = false;
     });
   }
@@ -74,13 +84,23 @@ class _AccountsScreenState extends State<AccountsScreen> {
         .fold(0.0, (sum, a) => sum + _balanceFor(a));
   }
 
-  double get _trueNetWorth {
+  double get _allZonesTotal {
     double total = 0;
     for (var z = 1; z <= 4; z++) {
       total += _zoneTotal(z);
     }
     return total;
   }
+
+  /// Overall financial position: all account balances, minus money held
+  /// in custody for someone else (a liability), plus money owed to me
+  /// that I've fronted (an asset not yet in hand).
+  double get _trueNetWorth =>
+      _allZonesTotal - _custodyHeld + _openReceivablesTotal;
+
+  /// Same, but without counting pending debts owed to me — since those
+  /// might or might not actually get paid back.
+  double get _netWorthWithoutDebt => _allZonesTotal - _custodyHeld;
 
   void _toggleAll() {
     setState(() {
@@ -178,6 +198,15 @@ class _AccountsScreenState extends State<AccountsScreen> {
               fontWeight: FontWeight.w700,
               color: _gold,
               letterSpacing: -1,
+            ),
+          ),
+          const SizedBox(height: 4),
+          MoneyText(
+            'Ksh ${_netWorthWithoutDebt.toStringAsFixed(2)} without pending debts',
+            hidden: _allHidden,
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.white.withOpacity(0.35),
             ),
           ),
         ],
