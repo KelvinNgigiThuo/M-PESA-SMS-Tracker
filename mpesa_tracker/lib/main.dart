@@ -7,6 +7,7 @@ import 'screens/setup_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'app.dart';
 import 'overlay/overlay_channel.dart';
+import 'services/transaction_recorder.dart';
 
 final AppDatabase db = AppDatabase();
 final ValueNotifier<bool> isPrivacyMode = ValueNotifier(false);
@@ -62,6 +63,24 @@ class _AppEntryState extends State<AppEntry> {
 void tagCardMain() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const TagCardApp());
+}
+
+// ── Headless entry point (used by TransactionRecorder.kt) ─────
+// No UI — just records a parsed SMS as untagged before any bubble is
+// ever shown, so nothing is lost if the user never taps it or a newer
+// message replaces it first. See lib/services/transaction_recorder.dart.
+@pragma('vm:entry-point')
+void recordTransactionMain() {
+  WidgetsFlutterBinding.ensureInitialized();
+  const channel = MethodChannel('com.kelvin.mpesa/record');
+  channel.setMethodCallHandler((call) async {
+    if (call.method == 'recordUntagged') {
+      final data = Map<String, dynamic>.from(call.arguments);
+      await recordUntaggedIfNeeded(data);
+    }
+    return null;
+  });
+  channel.invokeMethod('ready');
 }
 
 class TagCardApp extends StatelessWidget {

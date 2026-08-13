@@ -235,6 +235,27 @@ class AppDatabase extends _$AppDatabase {
     return balances;
   }
 
+  /// Open custody pools (money held on behalf of someone else) with a
+  /// positive remaining balance, keyed by their pool label.
+  Future<List<Map<String, dynamic>>> getCustodyPoolBalances() async {
+    final all = await select(transactions).get();
+    final Map<String, double> poolMap = {};
+    for (final t in all) {
+      if (t.type == 'custody_receive') {
+        final label = t.poolLabel ?? 'Unnamed';
+        poolMap[label] = (poolMap[label] ?? 0) + t.amount;
+      }
+      if (t.type == 'custody_spend') {
+        final label = t.poolLabel ?? 'Unnamed';
+        poolMap[label] = (poolMap[label] ?? 0) - t.amount;
+      }
+    }
+    return poolMap.entries
+        .where((e) => e.value > 0)
+        .map((e) => {'label': e.key, 'balance': e.value})
+        .toList();
+  }
+
   Future<void> updateTaggedTransaction(
     int id, {
     required String type,

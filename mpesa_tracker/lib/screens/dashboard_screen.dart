@@ -203,15 +203,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           _sectionTitle('Owed to me',
                               total: _openReceivablesTotal,
                               color: _incomeColor),
-                          ..._openReceivables
-                              .map(_buildReceivableRow),
+                          _buildScrollWindow(
+                            itemCount: _openReceivables.length,
+                            itemBuilder: (i) => _buildReceivableRow(
+                                _openReceivables[i]),
+                          ),
                           const SizedBox(height: 16),
                         ],
                         if (_custodyPools.isNotEmpty) ...[
                           _sectionTitle("I'm holding",
                               total: _custodyHeld,
                               color: _holdingColor),
-                          ..._custodyPools.map(_buildCustodyRow),
+                          _buildScrollWindow(
+                            itemCount: _custodyPools.length,
+                            itemBuilder: (i) =>
+                                _buildCustodyRow(_custodyPools[i]),
+                          ),
                           const SizedBox(height: 16),
                         ],
                         if (_recent.isNotEmpty) ...[
@@ -502,6 +509,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     fontWeight: FontWeight.w600,
                     color: color)),
         ],
+      ),
+    );
+  }
+
+  // ── Scrollable window (caps visible rows at 5, scrolls beyond that) ─
+  static const double _rowHeight = 43;
+  static const int _maxVisibleRows = 5;
+
+  Widget _buildScrollWindow({
+    required int itemCount,
+    required Widget Function(int) itemBuilder,
+  }) {
+    final visibleRows =
+        itemCount < _maxVisibleRows ? itemCount : _maxVisibleRows;
+    return SizedBox(
+      height: _rowHeight * visibleRows,
+      child: ListView.builder(
+        padding: EdgeInsets.zero,
+        physics: itemCount > _maxVisibleRows
+            ? const ClampingScrollPhysics()
+            : const NeverScrollableScrollPhysics(),
+        itemCount: itemCount,
+        itemBuilder: (context, i) => itemBuilder(i),
       ),
     );
   }

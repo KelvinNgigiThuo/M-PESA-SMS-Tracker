@@ -4,6 +4,35 @@ import '../database/app_database.dart';
 import '../main.dart';
 import 'tag_card.dart';
 
+// ── Shared chip widget ──────────────────────────────────────────────────
+Widget buildChoiceChip(
+    String label, bool selected, Color color, VoidCallback onTap) {
+  return GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: selected
+            ? color.withOpacity(0.2)
+            : tagCardWhite.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(
+          color: selected
+              ? color.withOpacity(0.6)
+              : tagCardWhite.withOpacity(0.12),
+          width: 0.5,
+        ),
+      ),
+      child: Text(label,
+          style: TextStyle(
+              fontSize: 12,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+              color:
+                  selected ? color : tagCardWhite.withOpacity(0.8))),
+    ),
+  );
+}
+
 // ── Root screen ───────────────────────────────────────────────────────
 Widget buildOutflowRoot(TagCardState s) {
   return Column(
@@ -214,6 +243,12 @@ Widget buildOutflowNotMine(TagCardState s) {
         subtitle: 'Spending from a custody pool',
         onTap: () => s.setState(() {
           s.noteController.clear();
+          s.selectedCustodyPool = null;
+          s.selectedCategory = null;
+          s.selectedCategoryId = null;
+          s.selectedSubcategory = null;
+          s.poolAmountController.text =
+              s.widget.amount.toStringAsFixed(2);
           s.screen = 'custody';
         }),
       ),
@@ -235,6 +270,50 @@ Widget buildOutflowNotMine(TagCardState s) {
 
 // ── Custody note ──────────────────────────────────────────────────────
 Widget buildCustodyNote(TagCardState s) {
+  if (s.loadingCustodyPools) {
+    return Column(
+      children: [
+        s.buildHeader(
+            "Holding their money · Ksh ${s.widget.amount.toInt()}",
+            backScreen: 'not_mine'),
+        const SizedBox(height: 24),
+        const Center(
+            child: CircularProgressIndicator(color: tagCardGold)),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
+  final addingNew = s.selectedCustodyPool == null;
+  const poolColor = Color(0xFF4a9eff);
+  const expenseColor = Color(0xFFe87070);
+
+  final poolAmount = double.tryParse(
+          s.poolAmountController.text.trim().replaceAll(',', '')) ??
+      s.widget.amount;
+  final remainder =
+      (s.widget.amount - poolAmount).clamp(0, s.widget.amount);
+  final needsRemainder = remainder > 0;
+
+  if (needsRemainder &&
+      s.expenseCategories.isEmpty &&
+      !s.loadingCategories) {
+    s.loadExpenseCategories();
+  }
+
+  final topLevel =
+      s.expenseCategories.where((c) => c.parentId == null).toList();
+  final subcategories = s.selectedCategoryId == null
+      ? <Category>[]
+      : s.expenseCategories
+          .where((c) => c.parentId == s.selectedCategoryId)
+          .toList();
+  final remainderNeedsSubcategory =
+      s.selectedCategoryId != null && subcategories.isNotEmpty;
+  final canSave = !needsRemainder ||
+      (s.selectedCategory != null &&
+          (!remainderNeedsSubcategory || s.selectedSubcategory != null));
+
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
@@ -242,14 +321,189 @@ Widget buildCustodyNote(TagCardState s) {
           "Holding their money · Ksh ${s.widget.amount.toInt()}",
           backScreen: 'not_mine'),
       const SizedBox(height: 16),
-      Text("What's this for?",
-          style: TextStyle(
-              fontSize: 11,
-              color: tagCardWhite.withOpacity(0.5))),
-      const SizedBox(height: 8),
-      s.buildNoteField('e.g. Fuel float, Westlands job'),
-      const SizedBox(height: 20),
-      s.buildSaveBtn('Save', () => saveCustodySpend(s)),
+      if (s.custodyPools.isNotEmpty) ...[
+        Text('Which pool is this from?',
+            style: TextStyle(
+                fontSize: 11,
+                color: tagCardWhite.withOpacity(0.5))),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            ...s.custodyPools.map((pool) {
+              final label = pool['label'] as String;
+              final balance = pool['balance'] as double;
+              final selected = s.selectedCustodyPool == label;
+              return GestureDetector(
+                onTap: () => s.setState(() {
+                  s.selectedCustodyPool = label;
+                  s.noteController.clear();
+                  s.poolAmountController.text =
+                      (balance < s.widget.amount ? balance : s.widget.amount)
+                          .toStringAsFixed(2);
+                }),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: selected
+                        ? poolColor.withOpacity(0.2)
+                        : tagCardWhite.withOpacity(0.06),
+                    borderRadius: BorderRadius.circular(99),
+                    border: Border.all(
+                      color: selected
+                          ? poolColor.withOpacity(0.6)
+                          : tagCardWhite.withOpacity(0.12),
+                      width: 0.5,
+                    ),
+                  ),
+                  child: Text('$label · Ksh ${balance.toInt()}',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: selected
+                              ? FontWeight.w600
+                              : FontWeight.w400,
+                          color: selected
+                              ? poolColor
+                              : tagCardWhite.withOpacity(0.8))),
+                ),
+              );
+            }),
+            GestureDetector(
+              onTap: () => s.setState(() {
+                s.selectedCustodyPool = null;
+                s.poolAmountController.text =
+                    s.widget.amount.toStringAsFixed(2);
+              }),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: addingNew
+                      ? tagCardGold.withOpacity(0.15)
+                      : tagCardWhite.withOpacity(0.06),
+                  borderRadius: BorderRadius.circular(99),
+                  border: Border.all(
+                    color: addingNew
+                        ? tagCardGold.withOpacity(0.5)
+                        : tagCardWhite.withOpacity(0.12),
+                    width: 0.5,
+                  ),
+                ),
+                child: Text('+ New pool',
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: addingNew
+                            ? FontWeight.w600
+                            : FontWeight.w400,
+                        color: addingNew
+                            ? tagCardGold
+                            : tagCardWhite.withOpacity(0.8))),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+      ],
+      if (addingNew) ...[
+        Text(
+            s.custodyPools.isEmpty
+                ? "What's this for?"
+                : 'New pool name',
+            style: TextStyle(
+                fontSize: 11,
+                color: tagCardWhite.withOpacity(0.5))),
+        const SizedBox(height: 8),
+        s.buildNoteField('e.g. Fuel float, Westlands job'),
+        const SizedBox(height: 20),
+      ],
+      // Only worth showing the split when there's actually a pool
+      // identity to split against (an existing pool, or a new one
+      // being named).
+      if (!addingNew || s.custodyPools.isEmpty) ...[
+        Text('Amount from this pool',
+            style: TextStyle(
+                fontSize: 11,
+                color: tagCardWhite.withOpacity(0.5))),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Text('Ksh',
+                style: TextStyle(
+                    fontSize: 14,
+                    color: tagCardWhite.withOpacity(0.6))),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextField(
+                controller: s.poolAmountController,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                style: const TextStyle(
+                    color: tagCardWhite,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600),
+                cursorColor: tagCardGold,
+                onChanged: (_) => s.setState(() {}),
+                decoration: InputDecoration(
+                  isDense: true,
+                  enabledBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(
+                          color: tagCardWhite.withOpacity(0.15))),
+                  focusedBorder: const UnderlineInputBorder(
+                      borderSide: BorderSide(color: tagCardGold)),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text('of Ksh ${s.widget.amount.toStringAsFixed(0)} total',
+            style: TextStyle(
+                fontSize: 10, color: tagCardWhite.withOpacity(0.35))),
+        const SizedBox(height: 20),
+      ],
+      if (needsRemainder) ...[
+        Text(
+            'Ksh ${remainder.toStringAsFixed(0)} is your own money — what for?',
+            style: TextStyle(
+                fontSize: 11,
+                color: tagCardWhite.withOpacity(0.5))),
+        const SizedBox(height: 8),
+        if (s.loadingCategories)
+          const Center(
+              child: CircularProgressIndicator(color: tagCardGold))
+        else ...[
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: topLevel.map((c) {
+              final selected = s.selectedCategoryId == c.id;
+              return buildChoiceChip(c.name, selected, expenseColor,
+                  () => s.setState(() {
+                        s.selectedCategory = c.name;
+                        s.selectedCategoryId = c.id;
+                        s.selectedSubcategory = null;
+                      }));
+            }).toList(),
+          ),
+          if (subcategories.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: subcategories.map((c) {
+                final selected = s.selectedSubcategory == c.name;
+                return buildChoiceChip(c.name, selected, expenseColor,
+                    () => s.setState(() => s.selectedSubcategory = c.name));
+              }).toList(),
+            ),
+          ],
+        ],
+        const SizedBox(height: 20),
+      ],
+      s.buildSaveBtn(
+          'Save', canSave ? () => saveCustodySpend(s) : null),
     ],
   );
 }
@@ -303,36 +557,6 @@ Widget buildExpense(TagCardState s) {
   final canSave = s.selectedCategory != null &&
       (!needsSubcategory || s.selectedSubcategory != null);
 
-  Widget buildChip(String label, bool selected, Color color, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-            horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected
-              ? color.withOpacity(0.2)
-              : tagCardWhite.withOpacity(0.06),
-          borderRadius: BorderRadius.circular(99),
-          border: Border.all(
-            color: selected
-                ? color.withOpacity(0.6)
-                : tagCardWhite.withOpacity(0.12),
-            width: 0.5,
-          ),
-        ),
-        child: Text(label,
-            style: TextStyle(
-                fontSize: 12,
-                fontWeight:
-                    selected ? FontWeight.w600 : FontWeight.w400,
-                color: selected
-                    ? color
-                    : tagCardWhite.withOpacity(0.8))),
-      ),
-    );
-  }
-
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
@@ -345,7 +569,7 @@ Widget buildExpense(TagCardState s) {
         runSpacing: 8,
         children: topLevel.map((c) {
           final selected = s.selectedCategoryId == c.id;
-          return buildChip(c.name, selected, const Color(0xFFe87070),
+          return buildChoiceChip(c.name, selected, const Color(0xFFe87070),
               () => s.setState(() {
                     s.selectedCategory = c.name;
                     s.selectedCategoryId = c.id;
@@ -365,7 +589,7 @@ Widget buildExpense(TagCardState s) {
           runSpacing: 8,
           children: subcategories.map((c) {
             final selected = s.selectedSubcategory == c.name;
-            return buildChip(c.name, selected, const Color(0xFFe87070),
+            return buildChoiceChip(c.name, selected, const Color(0xFFe87070),
                 () => s.setState(() => s.selectedSubcategory = c.name));
           }).toList(),
         ),
@@ -408,12 +632,21 @@ Future<void> saveTransfer(TagCardState s, String bucketName) async {
 }
 
 Future<void> saveCustodySpend(TagCardState s) async {
-  final label = s.noteController.text.trim().isEmpty
-      ? 'Custody – ${DateTime.now().day}/${DateTime.now().month}'
-      : s.noteController.text.trim();
+  final label = s.selectedCustodyPool ??
+      (s.noteController.text.trim().isEmpty
+          ? 'Custody – ${DateTime.now().day}/${DateTime.now().month}'
+          : s.noteController.text.trim());
+
+  final poolAmount = double.tryParse(
+          s.poolAmountController.text.trim().replaceAll(',', '')) ??
+      s.widget.amount;
+  final custodyAmount =
+      poolAmount.clamp(0, s.widget.amount).toDouble();
+  final remainder = s.widget.amount - custodyAmount;
+
   await s.upsert(TransactionsCompanion(
     txCode: drift.Value(s.widget.txCode),
-    amount: drift.Value(s.widget.amount),
+    amount: drift.Value(custodyAmount),
     recipient: drift.Value(s.widget.recipient),
     direction: drift.Value('out'),
     type: drift.Value('custody_spend'),
@@ -423,6 +656,31 @@ Future<void> saveCustodySpend(TagCardState s) async {
     createdAt: drift.Value(DateTime.now()),
     isTagged: drift.Value(true),
   ));
+
+  // Part of this SMS was actually the user's own money on top of the
+  // pool — log the remainder as a separate true expense. Note: unlike
+  // saveExpense, there's no "Other: <note>" free-text extension here —
+  // noteController is already in use for the pool name on this screen,
+  // so reusing it for the category note too would risk mixing the two.
+  if (remainder > 0 && s.selectedCategory != null) {
+    final categoryLabel = s.selectedSubcategory != null
+        ? '${s.selectedCategory}: ${s.selectedSubcategory}'
+        : s.selectedCategory!;
+
+    await db.insertTransaction(TransactionsCompanion(
+      txCode: drift.Value('${s.widget.txCode}_expense'),
+      amount: drift.Value(remainder),
+      recipient: drift.Value(s.widget.recipient),
+      direction: drift.Value('out'),
+      type: drift.Value('expense'),
+      category: drift.Value(categoryLabel),
+      balanceAfter: drift.Value(s.widget.balance),
+      rawSms: drift.Value('auto-split from custody spend'),
+      createdAt: drift.Value(DateTime.now()),
+      isTagged: drift.Value(true),
+    ));
+  }
+
   await s.completeAndClose();
 }
 

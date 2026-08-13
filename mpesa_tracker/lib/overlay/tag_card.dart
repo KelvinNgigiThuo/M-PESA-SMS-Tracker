@@ -47,10 +47,15 @@ class TagCardState extends State<TagCard> {
   List<Category> otherIncomeCategories = [];
   bool loadingOtherIncome = false;
   String? selectedIncomeType;
+  List<Map<String, dynamic>> custodyPools = [];
+  bool loadingCustodyPools = false;
+  String? selectedCustodyPool;
+  final poolAmountController = TextEditingController();
 
   @override
   void dispose() {
     noteController.dispose();
+    poolAmountController.dispose();
     super.dispose();
   }
 
@@ -146,6 +151,9 @@ class TagCardState extends State<TagCard> {
       case 'not_mine':
         return buildOutflowNotMine(this);
       case 'custody':
+        if (custodyPools.isEmpty && !loadingCustodyPools) {
+          loadCustodyPools();
+        }
         return buildCustodyNote(this);
       case 'reimbursable':
         return buildReimbursableNote(this);
@@ -387,6 +395,16 @@ class TagCardState extends State<TagCard> {
     setState(() {
       otherIncomeCategories = cats;
       loadingOtherIncome = false;
+    });
+  }
+
+  Future<void> loadCustodyPools() async {
+    if (custodyPools.isNotEmpty) return;
+    setState(() => loadingCustodyPools = true);
+    final pools = await db.getCustodyPoolBalances();
+    setState(() {
+      custodyPools = pools;
+      loadingCustodyPools = false;
     });
   }
 

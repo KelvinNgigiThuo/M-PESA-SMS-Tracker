@@ -88,6 +88,13 @@ class OverlayService : Service() {
 
         Log.d("OverlayService", "Showing bubble: $direction Ksh$amount")
 
+        // Guarantee this transaction is recorded as untagged before the
+        // bubble is even shown — independent of whether it's tapped,
+        // replaced by the next message, or times out unseen.
+        TransactionRecorder.record(
+            this, amount, recipient, direction, txCode, balance
+        )
+
         showBubble(
             amount, recipient, direction,
             txCode, balance, txCost,
