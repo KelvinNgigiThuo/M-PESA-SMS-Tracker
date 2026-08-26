@@ -12,7 +12,6 @@
 - `MpesaParser.kt` is core — changes to SMS parsing logic require careful regex testing
 - v1 parsing behavior must not regress; v2 adds features on top
 - Never hand-edit `app_database.g.dart` — run build_runner after any schema change
-- `test/widget_test.dart` is broken boilerplate (references `MyApp`, not `DhahiriApp`) — ignore it
 - No iOS target, no CI
 
 ## Commands

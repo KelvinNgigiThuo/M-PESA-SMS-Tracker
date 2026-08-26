@@ -38,31 +38,17 @@ class _AccountsScreenState extends State<AccountsScreen> {
   Future<void> _load() async {
     final accounts = await db.getAllAccounts();
     final bucketBalances = await db.getBucketBalances();
-    final all = await db.watchAll().first;
+    final mpesaBalance = await db.getLatestBalanceAfter();
+    final custody = await db.getCustodyHeldTotal();
+    final receivables = await db.getOpenReceivablesTotal();
 
-    double mpesaBalance = 0;
-    DateTime? lastBalanceTime;
-    double custody = 0;
-    double receivables = 0;
-    for (final t in all) {
-      if (t.balanceAfter > 0) {
-        if (lastBalanceTime == null || t.createdAt.isAfter(lastBalanceTime)) {
-          mpesaBalance = t.balanceAfter;
-          lastBalanceTime = t.createdAt;
-        }
-      }
-      if (t.type == 'custody_receive') custody += t.amount;
-      if (t.type == 'custody_spend') custody -= t.amount;
-      if (t.type == 'receivable_create') receivables += t.amount;
-      if (t.type == 'receivable_clear') receivables -= t.amount;
-    }
-
+    if (!mounted) return;
     setState(() {
       _accounts = accounts;
       _bucketBalances = bucketBalances;
       _mpesaLiveBalance = mpesaBalance;
-      _custodyHeld = custody.clamp(0, double.infinity);
-      _openReceivablesTotal = receivables.clamp(0, double.infinity);
+      _custodyHeld = custody;
+      _openReceivablesTotal = receivables;
       _loading = false;
     });
   }

@@ -32,19 +32,9 @@ class _ManageAccountsScreenState extends State<ManageAccountsScreen> {
   Future<void> _load() async {
     final accounts = await db.getAllAccounts();
     final bucketBalances = await db.getBucketBalances();
-    final all = await db.watchAll().first;
+    final mpesaBalance = await db.getLatestBalanceAfter();
 
-    double mpesaBalance = 0;
-    DateTime? lastBalanceTime;
-    for (final t in all) {
-      if (t.balanceAfter > 0) {
-        if (lastBalanceTime == null || t.createdAt.isAfter(lastBalanceTime)) {
-          mpesaBalance = t.balanceAfter;
-          lastBalanceTime = t.createdAt;
-        }
-      }
-    }
-
+    if (!mounted) return;
     setState(() {
       _accounts = accounts;
       _bucketBalances = bucketBalances;

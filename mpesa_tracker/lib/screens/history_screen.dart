@@ -43,6 +43,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Future<void> _load() async {
     final all = await db.watchAll().first;
+    if (!mounted) return;
     setState(() {
       _all = all;
       _loading = false;

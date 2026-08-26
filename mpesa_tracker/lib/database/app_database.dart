@@ -219,18 +219,36 @@ class AppDatabase extends _$AppDatabase {
         ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
       .get();
 
+  /// Sums `amount` grouped by [column] for rows matching [type], via SQL
+  /// SUM/GROUP BY rather than pulling every row into Dart.
+  Future<Map<String, double>> _sumGroupedByType(
+    String type,
+    GeneratedColumn<String> column,
+  ) async {
+    final sumExp = transactions.amount.sum();
+    final query = selectOnly(transactions)
+      ..addColumns([column, sumExp])
+      ..where(transactions.type.equals(type))
+      ..groupBy([column]);
+    final rows = await query.get();
+    final Map<String, double> result = {};
+    for (final row in rows) {
+      final key = row.read(column);
+      if (key == null) continue;
+      result[key] = row.read(sumExp) ?? 0;
+    }
+    return result;
+  }
+
   Future<Map<String, double>> getBucketBalances() async {
-    final all = await select(transactions).get();
+    final out = await _sumGroupedByType('transfer', transactions.bucketName);
+    final inn = await _sumGroupedByType('transfer_in', transactions.bucketName);
     final Map<String, double> balances = {};
-    for (final t in all) {
-      if (t.bucketName == null) continue;
-      final bucket = t.bucketName!;
-      final current = balances[bucket] ?? 0.0;
-      if (t.type == 'transfer') {
-        balances[bucket] = current + t.amount;
-      } else if (t.type == 'transfer_in') {
-        balances[bucket] = current - t.amount;
-      }
+    for (final entry in out.entries) {
+      balances[entry.key] = (balances[entry.key] ?? 0) + entry.value;
+    }
+    for (final entry in inn.entries) {
+      balances[entry.key] = (balances[entry.key] ?? 0) - entry.value;
     }
     return balances;
   }
@@ -238,23 +256,84 @@ class AppDatabase extends _$AppDatabase {
   /// Open custody pools (money held on behalf of someone else) with a
   /// positive remaining balance, keyed by their pool label.
   Future<List<Map<String, dynamic>>> getCustodyPoolBalances() async {
-    final all = await select(transactions).get();
+    final received =
+        await _sumGroupedByType('custody_receive', transactions.poolLabel);
+    final spent =
+        await _sumGroupedByType('custody_spend', transactions.poolLabel);
     final Map<String, double> poolMap = {};
-    for (final t in all) {
-      if (t.type == 'custody_receive') {
-        final label = t.poolLabel ?? 'Unnamed';
-        poolMap[label] = (poolMap[label] ?? 0) + t.amount;
-      }
-      if (t.type == 'custody_spend') {
-        final label = t.poolLabel ?? 'Unnamed';
-        poolMap[label] = (poolMap[label] ?? 0) - t.amount;
-      }
+    for (final entry in received.entries) {
+      poolMap[entry.key] = (poolMap[entry.key] ?? 0) + entry.value;
+    }
+    for (final entry in spent.entries) {
+      poolMap[entry.key] = (poolMap[entry.key] ?? 0) - entry.value;
     }
     return poolMap.entries
         .where((e) => e.value > 0)
         .map((e) => {'label': e.key, 'balance': e.value})
         .toList();
   }
+
+  /// Total `amount` of rows matching [type] — 0 if none.
+  Future<double> _sumAmountForType(String type) async {
+    final sumExp = transactions.amount.sum();
+    final query = selectOnly(transactions)
+      ..addColumns([sumExp])
+      ..where(transactions.type.equals(type));
+    final row = await query.getSingleOrNull();
+    return row?.read(sumExp) ?? 0;
+  }
+
+  /// Net money currently held on behalf of others (custody received minus
+  /// custody spent), clamped to 0 or above.
+  Future<double> getCustodyHeldTotal() async {
+    final received = await _sumAmountForType('custody_receive');
+    final spent = await _sumAmountForType('custody_spend');
+    return (received - spent).clamp(0, double.infinity);
+  }
+
+  /// Net money fronted for others still outstanding (receivables created
+  /// minus receivables cleared), clamped to 0 or above.
+  Future<double> getOpenReceivablesTotal() async {
+    final created = await _sumAmountForType('receivable_create');
+    final cleared = await _sumAmountForType('receivable_clear');
+    return (created - cleared).clamp(0, double.infinity);
+  }
+
+  /// Sum of `amount` for transactions moving in [direction] within
+  /// [start, endExclusive) — e.g. a calendar month.
+  Future<double> getSumByDirectionInRange(
+    String direction,
+    DateTime start,
+    DateTime endExclusive,
+  ) async {
+    final sumExp = transactions.amount.sum();
+    final query = selectOnly(transactions)
+      ..addColumns([sumExp])
+      ..where(transactions.direction.equals(direction) &
+          transactions.createdAt.isBiggerOrEqualValue(start) &
+          transactions.createdAt.isSmallerThanValue(endExclusive));
+    final row = await query.getSingleOrNull();
+    return row?.read(sumExp) ?? 0;
+  }
+
+  /// The most recent `balanceAfter` reading across all transactions — the
+  /// M-Pesa account's live balance, since every SMS carries the balance at
+  /// the time it was sent.
+  Future<double> getLatestBalanceAfter() async {
+    final row = await (select(transactions)
+          ..where((t) => t.balanceAfter.isBiggerThanValue(0))
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
+          ..limit(1))
+        .getSingleOrNull();
+    return row?.balanceAfter ?? 0;
+  }
+
+  Future<List<Transaction>> getRecentTagged(int limit) =>
+      (select(transactions)
+        ..where((t) => t.isTagged.equals(true))
+        ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
+        ..limit(limit))
+      .get();
 
   Future<void> updateTaggedTransaction(
     int id, {
@@ -389,6 +468,13 @@ LazyDatabase _openConnection() {
     final dir = await getApplicationDocumentsDirectory();
     final file =
         File(p.join(dir.path, 'dhahiri.sqlite'));
-    return NativeDatabase.createInBackground(file);
+    // WAL lets separate connections (main app, tag card engine, headless
+    // recorder engine) read/write the same file concurrently without
+    // one write blocking/failing another — required given this app runs
+    // multiple Flutter engines against the same sqlite file at once.
+    return NativeDatabase.createInBackground(
+      file,
+      setup: (db) => db.execute('PRAGMA journal_mode=WAL;'),
+    );
   });
 }

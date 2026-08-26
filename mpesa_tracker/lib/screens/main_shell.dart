@@ -18,16 +18,22 @@ class _MainShellState extends State<MainShell> {
   static const _green = Color(0xFF1A3C34);
   static const _gold = Color(0xFFC9A84C);
 
-  final List<Widget> _screens = const [
-    DashboardScreen(),
-    AccountsScreen(),
-    HistoryScreen(),
-    SettingsScreen(),
+  // Each tab's screen (and its own _load() on initState) is only built the
+  // first time it's actually visited — not all four eagerly at cold start —
+  // so switching tabs later reuses the same instance and doesn't re-query.
+  static const List<Widget Function()> _builders = [
+    DashboardScreen.new,
+    AccountsScreen.new,
+    HistoryScreen.new,
+    SettingsScreen.new,
   ];
+
+  final List<Widget?> _screens = List.filled(4, null);
 
   @override
   void initState() {
     super.initState();
+    _screens[_currentIndex] = _builders[_currentIndex]();
     requestedTab.addListener(_onTabRequested);
   }
 
@@ -40,9 +46,16 @@ class _MainShellState extends State<MainShell> {
   void _onTabRequested() {
     final index = requestedTab.value;
     if (index != null) {
-      setState(() => _currentIndex = index);
+      _selectTab(index);
       requestedTab.value = null;
     }
+  }
+
+  void _selectTab(int index) {
+    setState(() {
+      _currentIndex = index;
+      _screens[index] ??= _builders[index]();
+    });
   }
 
   @override
@@ -50,7 +63,10 @@ class _MainShellState extends State<MainShell> {
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
-        children: _screens,
+        children: [
+          for (var i = 0; i < _screens.length; i++)
+            _screens[i] ?? const SizedBox.shrink(),
+        ],
       ),
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
@@ -84,7 +100,7 @@ class _MainShellState extends State<MainShell> {
     final isActive = _currentIndex == index;
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() => _currentIndex = index),
+        onTap: () => _selectTab(index),
         behavior: HitTestBehavior.opaque,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,

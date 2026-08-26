@@ -10,7 +10,7 @@
 
     <application
         android:label="Dhahiri"
-        android:name="${applicationName}"
+        android:name=".DhahiriApplication"
         android:icon="@mipmap/ic_launcher">
 
         <activity

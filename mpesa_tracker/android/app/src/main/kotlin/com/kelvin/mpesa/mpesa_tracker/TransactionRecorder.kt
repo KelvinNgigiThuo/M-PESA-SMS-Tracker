@@ -5,7 +5,6 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import io.flutter.FlutterInjector
-import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.dart.DartExecutor
 import io.flutter.plugin.common.MethodChannel
 
@@ -16,6 +15,12 @@ import io.flutter.plugin.common.MethodChannel
  * down. Called from OverlayService for every parsed SMS, so a record
  * exists before the bubble is ever shown — independent of whether it's
  * tapped, replaced by a newer message, or times out unseen.
+ *
+ * Engines are created via the app-wide FlutterEngineGroup
+ * (DhahiriApplication.engineGroup) rather than `FlutterEngine(context)`
+ * directly — a group shares the GPU/font/isolate group context across
+ * engines, so spinning one up per SMS (including bursts of several in a
+ * row) doesn't each pay the cost of a full engine boot from scratch.
  *
  * Must be called from the main thread (FlutterEngine requires it).
  */
@@ -38,7 +43,12 @@ object TransactionRecorder {
             loader.startInitialization(appContext)
             loader.ensureInitializationComplete(appContext, null)
 
-            val engine = FlutterEngine(appContext)
+            val engineGroup = (appContext as DhahiriApplication).engineGroup
+            val entrypoint = DartExecutor.DartEntrypoint(
+                loader.findAppBundlePath(),
+                "recordTransactionMain"
+            )
+            val engine = engineGroup.createAndRunEngine(appContext, entrypoint)
             val handler = Handler(Looper.getMainLooper())
             var finished = false
 
@@ -92,12 +102,6 @@ object TransactionRecorder {
                     result.notImplemented()
                 }
             }
-
-            val entrypoint = DartExecutor.DartEntrypoint(
-                loader.findAppBundlePath(),
-                "recordTransactionMain"
-            )
-            engine.dartExecutor.executeDartEntrypoint(entrypoint)
         } catch (e: Exception) {
             // Degrades gracefully: the tag-card-open safety net
             // (recordUntaggedIfNeeded in overlay_channel.dart) still

@@ -68,51 +68,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _load() async {
-    final all = await db.watchAll().first;
     final bucketBalances = await db.getBucketBalances();
     final accounts = await db.getAllAccounts();
+    final mpesaBalance = await db.getLatestBalanceAfter();
+    final custody = await db.getCustodyHeldTotal();
+    final receivables = await db.getOpenReceivablesTotal();
+    final openPools = await db.getCustodyPoolBalances();
+    final openReceivables = await db.getOpenReceivables();
+    final recent = await db.getRecentTagged(5);
 
-    double mpesaBalance = 0;
-    DateTime? lastBalanceTime;
-    double custody = 0;
-    double receivables = 0;
-    double monthlyOut = 0;
-    double monthlyIn = 0;
     final now = DateTime.now();
-    final Map<String, double> poolMap = {};
+    final monthStart = DateTime(now.year, now.month, 1);
+    final monthEnd = DateTime(now.year, now.month + 1, 1);
+    final monthlyOut =
+        await db.getSumByDirectionInRange('out', monthStart, monthEnd);
+    final monthlyIn =
+        await db.getSumByDirectionInRange('in', monthStart, monthEnd);
 
     // Load buffer target from prefs
     final prefs = await SharedPreferences.getInstance();
     final bufferTarget = prefs.getDouble('buffer_target') ?? 10000;
-
-    for (final t in all) {
-      if (t.createdAt.year == now.year && t.createdAt.month == now.month) {
-        if (t.direction == 'out') {
-          monthlyOut += t.amount;
-        } else if (t.direction == 'in') {
-          monthlyIn += t.amount;
-        }
-      }
-      if (t.balanceAfter > 0) {
-        if (lastBalanceTime == null ||
-            t.createdAt.isAfter(lastBalanceTime)) {
-          mpesaBalance = t.balanceAfter;
-          lastBalanceTime = t.createdAt;
-        }
-      }
-      if (t.type == 'custody_receive') {
-        custody += t.amount;
-        final label = t.poolLabel ?? 'Unnamed';
-        poolMap[label] = (poolMap[label] ?? 0) + t.amount;
-      }
-      if (t.type == 'custody_spend') {
-        custody -= t.amount;
-        final label = t.poolLabel ?? 'Unnamed';
-        poolMap[label] = (poolMap[label] ?? 0) - t.amount;
-      }
-      if (t.type == 'receivable_create') receivables += t.amount;
-      if (t.type == 'receivable_clear') receivables -= t.amount;
-    }
 
     // Zone totals for dashboard headline — mpesaBalance must already be
     // resolved above, since the M-Pesa account's live balance comes from it.
@@ -143,21 +118,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
     }
 
-    final openPools = poolMap.entries
-        .where((e) => e.value > 0)
-        .map((e) => {'label': e.key, 'balance': e.value})
-        .toList();
-
-    final openReceivables = all
-        .where((t) => t.type == 'receivable_create')
-        .toList();
-
-    final recent = all.where((t) => t.isTagged).take(5).toList();
-
+    if (!mounted) return;
     setState(() {
       _mpesaBalance = mpesaBalance;
-      _custodyHeld = custody.clamp(0, double.infinity);
-      _openReceivablesTotal = receivables.clamp(0, double.infinity);
+      _custodyHeld = custody;
+      _openReceivablesTotal = receivables;
       _bucketTotal = openingTotal;
       _zone1Total = zone1Total;
       _zone2Total = zone2Total;
