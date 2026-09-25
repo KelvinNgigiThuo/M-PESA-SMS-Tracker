@@ -493,7 +493,82 @@ class _HistoryScreenState extends State<HistoryScreen> {
       );
     }
 
-    return card;
+    // Fees and auto-split rows are derived from their parent transaction —
+    // untagging the parent removes/restores them, so they aren't tappable.
+    final isDerived = t.type == 'fee' || t.rawSms.startsWith('auto-split');
+    if (isDerived) return card;
+
+    return GestureDetector(
+      onTap: () => _showTaggedOptions(t),
+      child: card,
+    );
+  }
+
+  // ── Tagged transaction options ────────────────────────────────────
+  void _showTaggedOptions(Transaction t) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 16, 8, 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '${_typeLabel(t.type ?? 'untagged')} · Ksh ${t.amount.toInt()}',
+                style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: _green),
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                leading: const Icon(Icons.edit_outlined, color: _green),
+                title: const Text('Re-tag'),
+                subtitle: const Text('Clear this tag and choose a new one'),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  await _untag(t, retag: true);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.undo, color: _expenseColor),
+                title: const Text('Clear tag'),
+                subtitle: const Text('Move it back to untagged'),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  await _untag(t, retag: false);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _untag(Transaction t, {required bool retag}) async {
+    await db.untagTransaction(t.id);
+    if (retag && mounted) {
+      final fresh = await (db.select(db.transactions)
+            ..where((r) => r.id.equals(t.id)))
+          .getSingleOrNull();
+      if (fresh != null && mounted) {
+        await showTagCard(context, {
+          'amount': fresh.amount,
+          'recipient': fresh.recipient,
+          'direction': fresh.direction,
+          'txCode': fresh.txCode,
+          'balance': fresh.balanceAfter,
+          // Fee row was kept on untag — don't record it a second time.
+          'txCost': 0.0,
+        });
+      }
+    }
+    await _load();
   }
 
   String _typeLabel(String type) {

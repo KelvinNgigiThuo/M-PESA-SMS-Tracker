@@ -342,9 +342,11 @@ class AppDatabase extends _$AppDatabase {
     String? bucketName,
     String? poolLabel,
     String? receivableLabel,
+    double? amount,
   }) =>
       (update(transactions)..where((t) => t.id.equals(id)))
       .write(TransactionsCompanion(
+        amount: amount == null ? const Value.absent() : Value(amount),
         type: Value(type),
         isTagged: const Value(true),
         category: Value(category),
@@ -352,6 +354,75 @@ class AppDatabase extends _$AppDatabase {
         poolLabel: Value(poolLabel),
         receivableLabel: Value(receivableLabel),
       ));
+
+  /// Reverts a tagged transaction back to untagged so it can be re-tagged.
+  /// Removes rows auto-split from it at tagging time (`_income` from a
+  /// receivable overpayment, `_expense` from a custody spend remainder) and
+  /// folds their amount back in. The `_fee` row is kept — the fee was real.
+  Future<void> untagTransaction(int id) => transaction(() async {
+        final row = await (select(transactions)
+              ..where((t) => t.id.equals(id)))
+            .getSingleOrNull();
+        if (row == null || !row.isTagged) return;
+        var amount = row.amount;
+        final splitCodes = ['${row.txCode}_income', '${row.txCode}_expense'];
+        final splits = await (select(transactions)
+              ..where((t) => t.txCode.isIn(splitCodes)))
+            .get();
+        for (final split in splits) {
+          amount += split.amount;
+        }
+        await (delete(transactions)..where((t) => t.txCode.isIn(splitCodes)))
+            .go();
+        await (update(transactions)..where((t) => t.id.equals(id)))
+            .write(TransactionsCompanion(
+          amount: Value(amount),
+          type: const Value(null),
+          category: const Value(null),
+          bucketName: const Value(null),
+          poolLabel: const Value(null),
+          receivableLabel: const Value(null),
+          isTagged: const Value(false),
+        ));
+      });
+
+  /// Manual settlement rows (see [settleCustodyPool]) aren't real M-Pesa
+  /// movements, so they use this direction to stay out of in/out totals.
+  static const adjustmentDirection = 'adjust';
+
+  /// Zeroes a custody pool's remaining balance (e.g. the money was handed
+  /// back in cash) by recording a manual `custody_spend` adjustment.
+  Future<void> settleCustodyPool(String label, double balance) =>
+      into(transactions).insert(TransactionsCompanion(
+        txCode: Value('settle_${DateTime.now().millisecondsSinceEpoch}'),
+        amount: Value(balance),
+        recipient: const Value('Manual settlement'),
+        direction: const Value(adjustmentDirection),
+        type: const Value('custody_spend'),
+        poolLabel: Value(label),
+        rawSms: const Value('manual custody settlement'),
+        createdAt: Value(DateTime.now()),
+        isTagged: const Value(true),
+      ));
+
+  /// Untags every transaction in a custody pool — for a pool created by
+  /// mistake. Its SMS rows go back to untagged; manual settlements are
+  /// deleted outright since they have no SMS behind them.
+  Future<void> untagCustodyPool(String label) async {
+    await (delete(transactions)
+          ..where((t) =>
+              t.poolLabel.equals(label) &
+              t.direction.equals(adjustmentDirection)))
+        .go();
+    final rows = await (select(transactions)
+          ..where((t) =>
+              t.poolLabel.equals(label) &
+              t.type.isIn(['custody_receive', 'custody_spend'])))
+        .get();
+    for (final r in rows) {
+      await untagTransaction(r.id);
+    }
+  }
 
   // ── Account queries ───────────────────────────────────────────────
   Future<List<Account>> getAllAccounts() =>
