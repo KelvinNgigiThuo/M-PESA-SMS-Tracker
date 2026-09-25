@@ -345,6 +345,9 @@ class TagCardState extends State<TagCard> {
         bucketName: companion.bucketName.value,
         poolLabel: companion.poolLabel.value,
         receivableLabel: companion.receivableLabel.value,
+        // Custody spend / receivable clear can store less than the SMS
+        // amount (the rest goes to an auto-split row), so keep it in sync.
+        amount: companion.amount.present ? companion.amount.value : null,
       );
     } else {
       await db.insertTransaction(companion);

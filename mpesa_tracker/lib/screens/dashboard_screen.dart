@@ -536,6 +536,61 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // ── Custody row ───────────────────────────────────────────────────
   Widget _buildCustodyRow(Map<String, dynamic> pool) {
+    return GestureDetector(
+      onTap: () => _showCustodyOptions(pool),
+      child: _buildCustodyRowCard(pool),
+    );
+  }
+
+  void _showCustodyOptions(Map<String, dynamic> pool) {
+    final label = pool['label'] as String;
+    final balance = pool['balance'] as double;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 16, 8, 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('$label · Ksh ${balance.toInt()}',
+                  style: const TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              ListTile(
+                leading: const Icon(Icons.check_circle_outline,
+                    color: _holdingColor),
+                title: const Text('Mark as settled'),
+                subtitle: const Text(
+                    'Money was returned or used outside M-Pesa'),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  await db.settleCustodyPool(label, balance);
+                  _load();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.undo, color: _expenseColor),
+                title: const Text('Clear — tagged by mistake'),
+                subtitle: const Text(
+                    'Move its transactions back to untagged'),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  await db.untagCustodyPool(label);
+                  _load();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCustodyRowCard(Map<String, dynamic> pool) {
     return Container(
       margin: const EdgeInsets.only(bottom: 5),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
