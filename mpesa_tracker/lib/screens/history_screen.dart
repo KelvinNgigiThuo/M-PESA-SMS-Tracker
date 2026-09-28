@@ -527,8 +527,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
               const SizedBox(height: 8),
               ListTile(
                 leading: const Icon(Icons.edit_outlined, color: _green),
-                title: const Text('Re-tag'),
-                subtitle: const Text('Clear this tag and choose a new one'),
+                title: const Text('Edit'),
+                subtitle: const Text(
+                    'Change its flow, category or description'),
                 onTap: () async {
                   Navigator.pop(sheetContext);
                   await _untag(t, retag: true);
@@ -551,6 +552,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Future<void> _untag(Transaction t, {required bool retag}) async {
+    // Kept so an edit that's closed without saving leaves the old tag.
+    final snapshot =
+        retag ? await db.snapshotWithSplits(t.id) : const <Transaction>[];
     await db.untagTransaction(t.id);
     if (retag && mounted) {
       final fresh = await (db.select(db.transactions)
@@ -566,6 +570,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
           // Fee row was kept on untag — don't record it a second time.
           'txCost': 0.0,
         });
+        final after = await (db.select(db.transactions)
+              ..where((r) => r.id.equals(t.id)))
+            .getSingleOrNull();
+        if (after != null && !after.isTagged) {
+          await db.restoreSnapshot(snapshot);
+        }
       }
     }
     await _load();
