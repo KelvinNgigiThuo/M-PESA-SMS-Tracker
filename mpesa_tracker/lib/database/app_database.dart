@@ -386,6 +386,27 @@ class AppDatabase extends _$AppDatabase {
         ));
       });
 
+  /// The transaction plus any rows auto-split from it — captured before an
+  /// edit so it can be put back if the edit is abandoned.
+  Future<List<Transaction>> snapshotWithSplits(int id) async {
+    final row = await (select(transactions)..where((t) => t.id.equals(id)))
+        .getSingleOrNull();
+    if (row == null) return [];
+    final splits = await (select(transactions)
+          ..where((t) => t.txCode
+              .isIn(['${row.txCode}_income', '${row.txCode}_expense'])))
+        .get();
+    return [row, ...splits];
+  }
+
+  /// Puts back rows captured by [snapshotWithSplits], replacing whatever
+  /// is currently stored under their ids.
+  Future<void> restoreSnapshot(List<Transaction> rows) => transaction(() async {
+        for (final r in rows) {
+          await into(transactions).insertOnConflictUpdate(r);
+        }
+      });
+
   /// Manual settlement rows (see [settleCustodyPool]) aren't real M-Pesa
   /// movements, so they use this direction to stay out of in/out totals.
   static const adjustmentDirection = 'adjust';
